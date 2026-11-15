@@ -1,0 +1,8 @@
+services:
+  kingbee:
+    build: .
+    image: kingbee:latest
+    container_name: kingbee
+    ports:
+      - "${KINGBEE_PORT:-7461}:8080"
+    restart: unless-stopped

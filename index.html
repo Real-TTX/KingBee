@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#ffc928" />
+    <title>King Bee</title>
+    <link rel="icon" id="favicon" href="data:," />
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <!-- ============================================================ HUD -->
+    <div id="hud" class="hidden">
+      <div id="scores"></div>
+      <div id="timer" class="hidden"></div>
+      <div id="wave" class="hidden">
+        <div class="wave-icon"></div>
+        <div class="wave-text"><b class="wave-name"></b><span class="wave-desc"></span></div>
+        <div class="wave-bar"><i></i></div>
+      </div>
+      <div id="toasts"></div>
+      <div id="countdown" class="hidden"></div>
+      <div id="net-badge" class="hidden"><span class="dot"></span><span class="txt"></span></div>
+      <div id="puzzle-top" class="hidden">
+        <div class="pz-title"></div>
+        <div class="pz-hint"></div>
+      </div>
+      <div id="puzzle-bar" class="hidden">
+        <div class="pz-arrows"></div>
+        <button id="pz-start" class="btn primary"></button>
+        <button id="pz-clear" class="btn" data-icon="clear">Pfeile weg <kbd>R</kbd></button>
+      </div>
+      <div id="puzzle-fail" class="hidden">
+        <div class="fail-text"></div>
+        <button id="pz-retry" class="btn primary" data-icon="refresh">Nochmal planen <kbd>Leertaste</kbd></button>
+      </div>
+      <div id="controls-hint">Feld anvisieren + <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten &middot; Wischen &middot; Rechtsklick entfernt</div>
+      <button id="pause-btn" class="icon-btn" data-icon="pause" title="Pause (Esc)"></button>
+      <button id="mute-btn" class="icon-btn" title="Ton (M)"></button>
+    </div>
+
+    <!-- ========================================================= SCREENS -->
+    <div id="screens">
+      <!-- main menu -->
+      <section id="menu" class="screen">
+        <div class="drip"></div>
+        <div class="pollen"></div>
+        <div class="menu-logo"></div>
+        <nav class="menu-cards">
+          <button class="mcard" data-go="battle-setup" style="--a:#ffb000;--b:#ff7a00">
+            <span class="mc-hex"><span class="mc-inner"><span class="mc-icon" data-icon="battle"></span></span></span>
+            <span class="mc-title">Schwarm-Kampf</span>
+            <span class="mc-sub">Gegen die KI</span>
+          </button>
+          <button class="mcard" data-go="online" style="--a:#3fb4ff;--b:#1d6fe0">
+            <span class="mc-hex"><span class="mc-inner"><span class="mc-icon" data-icon="online"></span></span></span>
+            <span class="mc-title">Online</span>
+            <span class="mc-sub">Mit Freunden spielen</span>
+          </button>
+          <button class="mcard" data-go="puzzles" style="--a:#5ad06b;--b:#219b45">
+            <span class="mc-hex"><span class="mc-inner"><span class="mc-icon" data-icon="puzzle"></span></span></span>
+            <span class="mc-title">Puzzle</span>
+            <span class="mc-sub">12 knifflige Level</span>
+          </button>
+          <button class="mcard" data-go="help" style="--a:#c58bff;--b:#7d3fe0">
+            <span class="mc-hex"><span class="mc-inner"><span class="mc-icon" data-icon="book"></span></span></span>
+            <span class="mc-title">Anleitung</span>
+            <span class="mc-sub">So geht's</span>
+          </button>
+        </nav>
+        <div class="menu-foot">
+          <button id="menu-mute" class="pill"></button>
+          <span class="ver">KING BEE &middot; v0.3</span>
+        </div>
+      </section>
+
+      <!-- puzzle selection -->
+      <section id="puzzles" class="screen hidden">
+        <div class="panel">
+          <header class="panel-head">
+            <button class="round-btn" data-go="menu" data-icon="back" title="Zurück"></button>
+            <h2>Puzzle</h2>
+            <span class="head-sub">Pfeile legen, Start drücken &ndash; jede Biene muss heim.</span>
+          </header>
+          <div id="puzzle-grid" class="comb"></div>
+        </div>
+      </section>
+
+      <!-- local battle setup -->
+      <section id="battle-setup" class="screen hidden">
+        <div class="panel wide">
+          <header class="panel-head">
+            <button class="round-btn" data-go="menu" data-icon="back" title="Zurück"></button>
+            <h2>Schwarm-Kampf</h2>
+            <span class="head-sub">Wähle Karte und Gegner</span>
+          </header>
+          <div id="map-grid" class="map-grid"></div>
+          <div id="setup-options" class="options"></div>
+          <p class="sub" id="setup-desc"></p>
+          <div class="panel-foot">
+            <button class="btn big primary" id="start-battle" data-icon="play">Los geht's</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- online: name / create / join -->
+      <section id="online" class="screen hidden">
+        <div class="panel wide">
+          <header class="panel-head">
+            <button class="round-btn" data-go="menu" data-icon="back" title="Zurück"></button>
+            <h2>Online</h2>
+            <span class="head-sub" id="net-status">Verbinde &hellip;</span>
+          </header>
+          <div class="online-grid">
+            <div class="box">
+              <h3 data-icon="bee">Dein Name</h3>
+              <input id="net-name" class="field" maxlength="16" autocomplete="off" spellcheck="false" />
+              <button id="net-create" class="btn big primary" data-icon="plus">Raum erstellen</button>
+            </div>
+            <div class="box">
+              <h3 data-icon="enter">Mit Code beitreten</h3>
+              <input id="net-code" class="field code" maxlength="4" placeholder="ABCD" autocomplete="off" spellcheck="false" />
+              <button id="net-join" class="btn big" data-icon="enter">Beitreten</button>
+            </div>
+            <div class="box rooms">
+              <h3 data-icon="users">Offene Räume <button id="net-refresh" class="mini-btn" data-icon="refresh" title="Aktualisieren"></button></h3>
+              <div id="room-list"></div>
+            </div>
+          </div>
+          <p class="sub error" id="net-error"></p>
+        </div>
+      </section>
+
+      <!-- online: room / lobby -->
+      <section id="room" class="screen hidden">
+        <div class="panel wide">
+          <header class="panel-head">
+            <button class="round-btn" id="room-leave" data-icon="back" title="Raum verlassen"></button>
+            <h2>Raum <span id="room-code" class="code-tag"></span></h2>
+            <button id="room-copy" class="btn small" data-icon="link">Einladungslink kopieren</button>
+          </header>
+          <div class="room-grid">
+            <div>
+              <h3 class="sec" data-icon="hive">Bienenstöcke</h3>
+              <div id="room-seats" class="seats"></div>
+            </div>
+            <div>
+              <h3 class="sec" data-icon="map">Karte</h3>
+              <div id="room-maps" class="map-grid small"></div>
+              <div id="room-options" class="options"></div>
+            </div>
+          </div>
+          <div class="panel-foot">
+            <span id="room-hint" class="sub"></span>
+            <button id="room-start" class="btn big primary" data-icon="play">Spiel starten</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- help -->
+      <section id="help" class="screen hidden">
+        <div class="panel wide">
+          <header class="panel-head">
+            <button class="round-btn" data-go="menu" data-icon="back" title="Zurück"></button>
+            <h2>So spielst du</h2>
+          </header>
+          <div class="help-grid">
+            <div class="hcard"><span class="hic" data-icon="flower"></span><h3>Blüten</h3><p>Aus den Blüten schwärmen ständig Bienen. Sie fliegen geradeaus und biegen an Wänden zuerst <b>rechts</b> ab, sonst links, sonst zurück.</p></div>
+            <div class="hcard"><span class="hic" data-icon="arrow"></span><h3>Pfeile</h3><p>Maus auf ein Feld und <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten drücken. Am Handy: übers Feld wischen. Du hast <b>3 Pfeile</b>, ein vierter ersetzt den ältesten.</p></div>
+            <div class="hcard"><span class="hic" data-icon="hive"></span><h3>Bienenstock</h3><p>Jede Biene in deinem Stock zählt. Ist er voll, <b>schlüpft die neue Königin</b> und du gewinnst. Sonst gewinnt bei Zeitende der volle Stock.</p></div>
+            <div class="hcard"><span class="hic" data-icon="hornet"></span><h3>Hornissen</h3><p>Hornissen fressen Bienen. Fliegt eine in einen Stock, verliert er <b>ein Drittel</b> seiner Bienen. Sie beschädigen auch Pfeile.</p></div>
+            <div class="hcard"><span class="hic" data-icon="sparkle"></span><h3>Besondere Bienen</h3><p><b>Goldbienen</b> zählen 10. <b>Blütenbienen</b> (rosa) lösen einen Bonus aus: Nektar, Raubzug, Wachsschild oder Duftspur.</p></div>
+            <div class="hcard"><span class="hic" data-icon="swirl"></span><h3>Wellen</h3><p>Das Ereignis-Rad dreht sich regelmäßig: Schwarmzeit, Hornissen-Alarm, Rückenwind, Honigregen, Goldfieber, Windstoß, Imker-Rauch, Wirbelwind.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- pause -->
+      <section id="pause" class="screen hidden">
+        <div class="panel narrow">
+          <header class="panel-head center"><h2>Pause</h2></header>
+          <div class="stack">
+            <button class="btn big primary" id="resume" data-icon="play">Weiter</button>
+            <button class="btn big" id="restart" data-icon="refresh">Neu starten</button>
+            <button class="btn big" id="quit" data-icon="leave">Hauptmenü</button>
+          </div>
+          <p class="sub" id="pause-note"></p>
+        </div>
+      </section>
+
+      <!-- result -->
+      <section id="result" class="screen hidden">
+        <div class="result-box">
+          <div class="result-crown" data-icon="crown"></div>
+          <h2 id="result-title"></h2>
+          <p class="sub" id="result-sub"></p>
+          <div id="result-table"></div>
+          <div class="row">
+            <button class="btn" id="result-menu" data-icon="leave">Hauptmenü</button>
+            <button class="btn big primary" id="result-again"></button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
