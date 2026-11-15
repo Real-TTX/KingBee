@@ -1,5 +1,8 @@
+# Build stages run on the build machine's platform (output is platform independent),
+# only the runtime stage exists per target architecture (amd64 / arm64).
+
 # --- 1) Build the browser game (Vite) -------------------------------------
-FROM node:24-alpine AS web
+FROM --platform=$BUILDPLATFORM node:24-alpine AS web
 WORKDIR /web
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -8,7 +11,7 @@ COPY src ./src
 RUN npm run build
 
 # --- 2) Publish the ASP.NET Core server -----------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS server
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS server
 WORKDIR /src
 COPY server/KingBee.Server/KingBee.Server.csproj server/KingBee.Server/
 RUN dotnet restore server/KingBee.Server/KingBee.Server.csproj

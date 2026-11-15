@@ -46,7 +46,7 @@ export function logoSVG() {
     <text x="${x}" y="262" text-anchor="${anchor}" class="kb-word-shine" fill="url(#kb-shine)">${text}</text>`;
 
   return `
-<svg class="kb-logo" viewBox="0 0 1000 470" role="img" aria-label="King Bee">
+<svg class="kb-logo" viewBox="-50 -10 1100 485" role="img" aria-label="King Bee">
   <defs>
     <linearGradient id="kb-gold" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff7b8"/>
