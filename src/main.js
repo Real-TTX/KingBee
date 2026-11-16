@@ -1,7 +1,7 @@
 import './style.css';
 import { View } from './render/view.js';
 import { audio } from './audio.js';
-import { Battle, WAVES, BONUSES } from './game/battle.js';
+import { Battle, WAVES, BONUSES, EVENT_SPIN } from './game/battle.js';
 import { AIPlayer } from './game/ai.js';
 import { PuzzleRun } from './game/puzzle.js';
 import { PUZZLES } from './game/levels.js';
@@ -24,13 +24,14 @@ const view = new View($('#stage'));
 // ============================================================ persistence
 
 const settings = {
-  map: 'wiese', aiCount: 3, difficulty: 'normal', timeLimit: 180, target: 150,
+  map: 'wiese', aiCount: 3, difficulty: 'normal', timeLimit: 180, target: 150, events: 'normal',
   ...JSON.parse(localStorage.getItem('kingbee.settings') || '{}'),
 };
 const saveSettings = () => localStorage.setItem('kingbee.settings', JSON.stringify(settings));
 const solved = new Set(JSON.parse(localStorage.getItem('kingbee.solved') || '[]'));
 const saveSolved = () => localStorage.setItem('kingbee.solved', JSON.stringify([...solved]));
-let playerName = localStorage.getItem('kingbee.name') || `Biene ${10 + Math.floor(Math.random() * 90)}`;
+let playerName = localStorage.getItem('kingbee.name') || '';
+const touchDevice = window.matchMedia('(pointer: coarse)').matches;
 
 // ============================================================ decoration
 
@@ -118,6 +119,7 @@ const OPTION_DEFS = {
   difficulty: { label: 'KI-Stärke', items: [['easy', 'Leicht'], ['normal', 'Normal'], ['hard', 'Schwer']] },
   timeLimit: { label: 'Zeit', items: [[120, '2 min'], [180, '3 min'], [300, '5 min']] },
   target: { label: 'Stock voll bei', items: [[100, '100'], [150, '150'], [250, '250']] },
+  events: { label: 'Ereignisse', items: [['off', 'Aus'], ['rare', 'Selten'], ['normal', 'Normal'], ['often', 'Oft'], ['chaos', 'Chaos']] },
 };
 
 function renderOptions(el, keys, values, onPick, locked = false) {
@@ -183,6 +185,7 @@ class BattleController {
     this.board = mapById(o.map).build();
     this.battle = new Battle(this.board, {
       slots: o.slots, difficulty: o.difficulty, timeLimit: o.timeLimit, target: o.target, seed: o.seed,
+      events: o.events || 'normal',
     });
     this.sim = this.battle.sim;
     if (this.demo) this.battle.state = 'running';
@@ -200,7 +203,8 @@ class BattleController {
     this.ended = false;
     this.lastCountdown = -1;
     this.spin = null;
-    this.waveHideAt = 0;
+    this.revealed = false;
+    this.hurtTimer = 0;
     this.shields = [false, false, false, false];
     // lockstep state
     this.frames = [];
@@ -233,7 +237,14 @@ class BattleController {
     $('#puzzle-bar').classList.add('hidden');
     $('#puzzle-fail').classList.add('hidden');
     $('#wave').classList.add('hidden');
-    $('#controls-hint').classList.toggle('hidden', !this.interactive);
+    $('#event').classList.add('hidden');
+    $('#hurt').classList.add('hidden');
+    const hint = $('#controls-hint');
+    hint.classList.toggle('hidden', !this.interactive);
+    hint.classList.toggle('touch', touchDevice);
+    hint.innerHTML = touchDevice
+      ? 'Über ein Feld <b>wischen</b> legt einen Pfeil &middot; <b>Tippen</b> dreht ihn'
+      : 'Feld anvisieren + <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten &middot; Ziehen &middot; Rechtsklick entfernt';
     const card = (p) => {
       const wild = this.slots[p] === 'wild';
       const kind = this.slots[p] === 'ai' ? icon('robot') : this.slots[p] === 'human' ? icon('bee') : '';
@@ -253,6 +264,11 @@ class BattleController {
 
   canPlace(x, y) {
     return this.interactive && this.battle.state === 'running' && this.sim.canPlaceArrow(this.me, x, y);
+  }
+
+  /** True while an event pauses the game (no input, no hover). */
+  get frozen() {
+    return this.battle.state === 'event';
   }
 
   place(x, y, dir) {
@@ -318,7 +334,9 @@ class BattleController {
     const b = this.battle;
     if (b.state === 'running') for (const ai of this.ais) ai.update();
     const evs = b.tick();
-    if (!this.demo) {
+    if (this.demo) {
+      this.handleFeed();
+    } else {
       if (b.state === 'countdown') {
         const n = Math.ceil(b.countdown / TICK_RATE);
         if (n !== this.lastCountdown) {
@@ -333,6 +351,7 @@ class BattleController {
         setTimeout(() => $('#countdown').classList.add('hidden'), 700);
       }
       this.handleFeed();
+      this.checkDamage(evs);
       eventAudio(evs);
     }
     b.feed.length = 0;
@@ -354,43 +373,157 @@ class BattleController {
     el.style.animation = '';
   }
 
-  setWaveIcon(name) {
-    $('#wave .wave-icon').innerHTML = icon(name);
-  }
+  // ------------------------------------------------------------ events
 
   handleFeed() {
     for (const f of this.battle.feed) {
-      if (f.kind === 'roulette') {
-        this.spin = { t: 0, next: 0, opts: f.options };
-        const el = $('#wave');
-        el.classList.remove('hidden', 'pop');
-        el.classList.add('spinning');
-        $('#wave .wave-desc').textContent = 'Das Ereignis-Rad dreht sich …';
-        $('#wave .wave-bar').style.visibility = 'hidden';
-      } else if (f.kind === 'wave') {
-        this.spin = null;
-        const w = WAVES[f.id];
-        const el = $('#wave');
-        el.classList.remove('hidden', 'spinning', 'pop');
-        void el.offsetWidth;
-        el.classList.add('pop');
-        this.setWaveIcon(w.icon);
-        $('#wave .wave-name').textContent = w.name;
-        $('#wave .wave-desc').textContent = w.desc;
-        $('#wave .wave-bar').style.visibility = w.dur ? 'visible' : 'hidden';
-        this.waveHideAt = w.dur ? 0 : performance.now() + 2600;
-        audio.wave();
-      } else if (f.kind === 'waveEnd') {
-        $('#wave').classList.add('hidden');
-      } else if (f.kind === 'bonus') {
-        const bo = BONUSES[f.id];
-        const who = `<b>${esc(this.names[f.owner])}</b>`;
-        let text = `${who}: ${bo.name} – ${bo.desc}`;
-        if (f.id === 'steal' && f.victim >= 0) text = `${who}: ${bo.name} – stiehlt ${f.amount} von ${esc(this.names[f.victim])}!`;
-        if (f.id === 'nectar') text = `${who}: ${bo.name} – +${f.amount} Bienen`;
-        toast(text, this.colors[f.owner], bo.icon);
-        if (f.owner === this.me) audio.bonus();
+      switch (f.kind) {
+        case 'eventStart': if (!this.demo) this.eventStart(f); break;
+        case 'wave': this.eventApply(f); break;
+        case 'eventEnd': if (!this.demo) this.eventEnd(f); break;
+        case 'waveEnd':
+          if (f.turns) view.turnFlowers(f.turns, 0.8);
+          if (!this.demo) $('#wave').classList.add('hidden');
+          break;
+        case 'bonus': if (!this.demo) this.bonus(f); break;
+        default: break;
       }
+    }
+  }
+
+  /** The game freezes and the event reel spins in the middle of the screen. */
+  eventStart(f) {
+    const el = $('#event');
+    el.className = '';
+    const opts = f.options;
+    const n = 16;
+    const items = [];
+    for (let i = 0; i < n - 1; i++) {
+      let id;
+      do id = opts[Math.floor(Math.random() * opts.length)]; while (id === items[i - 1] || (i === n - 2 && id === f.id));
+      items.push(id);
+    }
+    items.push(f.id);
+    const strip = $('#event .ev-strip');
+    strip.innerHTML = items.map((id) => `<div class="ev-item">${icon(WAVES[id].icon)}<b>${WAVES[id].name}</b></div>`).join('');
+    strip.style.transition = 'none';
+    strip.style.transform = 'translateY(0)';
+    void strip.offsetWidth;
+    strip.style.transition = `transform ${EVENT_SPIN * 0.97}s cubic-bezier(.12, .62, .18, 1)`;
+    strip.style.transform = `translateY(calc(var(--ih) * -${n - 1}))`;
+    $('#event .ev-desc').textContent = 'Das Spiel ruht kurz …';
+    this.spin = { t: 0, next: 0 };
+    this.revealed = false;
+    $('#wave').classList.add('hidden');
+    view.setHover(null);
+    view.eventFocus(true);
+    audio.eventStart();
+  }
+
+  reveal() {
+    const ev = this.battle.event;
+    this.revealed = true;
+    this.spin = null;
+    const el = $('#event');
+    el.classList.add('revealed');
+    $('#event .ev-desc').textContent = WAVES[ev.id].desc;
+    audio.reveal();
+  }
+
+  /** The event's effect lands (still paused): play its animation. */
+  eventApply(f) {
+    const w = WAVES[f.id];
+    view.eventFx(f.id);
+    if (f.id === 'move') {
+      view.moveHives(f.moves, w.anim - 0.4);
+      audio.whoosh();
+    } else if (f.id === 'bloom') {
+      view.turnFlowers(f.turns, 1.0);
+    } else if (f.id === 'flip') {
+      view.spinArrows(w.anim + 0.3);
+    } else if (f.id === 'wind' || f.id === 'swirl') {
+      audio.whoosh();
+    }
+    if (this.demo) return;
+    $('#event').classList.add(`fx-${f.id}`, 'applied');
+    if (f.id === 'move' && this.me >= 0) {
+      const mv = f.moves.find((m) => m.owner === this.me);
+      if (mv) setTimeout(() => toast('Dein Stock ist umgezogen!', this.color, 'shuffle'), (w.anim - 0.2) * 1000);
+    }
+  }
+
+  eventEnd(f) {
+    const el = $('#event');
+    el.classList.add('leaving');
+    setTimeout(() => { if (el.classList.contains('leaving')) el.classList.add('hidden'); }, 380);
+    view.eventFocus(false);
+    const w = WAVES[f.id];
+    if (w.dur > 0 && this.battle.wave) {
+      const box = $('#wave');
+      box.classList.remove('hidden', 'pop');
+      void box.offsetWidth;
+      box.classList.add('pop');
+      $('#wave .wave-icon').innerHTML = icon(w.icon);
+      $('#wave .wave-name').textContent = w.name;
+      $('#wave .wave-desc').textContent = w.desc;
+    }
+  }
+
+  bonus(f) {
+    const bo = BONUSES[f.id];
+    const who = `<b>${esc(this.names[f.owner])}</b>`;
+    let text = `${who}: ${bo.name} – ${bo.desc}`;
+    if (f.id === 'steal' && f.victim >= 0) {
+      text = `${who}: ${bo.name} – stiehlt ${f.amount} von ${esc(this.names[f.victim])}!`;
+      this.cardHit(f.victim, f.amount);
+      if (f.victim === this.me) this.hurt('Raubzug!', `${this.names[f.owner]} stiehlt dir ${f.amount} Bienen`);
+    }
+    if (f.id === 'nectar') text = `${who}: ${bo.name} – +${f.amount} Bienen`;
+    toast(text, this.colors[f.owner], bo.icon);
+    if (f.owner === this.me) audio.bonus();
+  }
+
+  // ------------------------------------------------------------ damage
+
+  checkDamage(evs) {
+    for (const ev of evs) {
+      if (ev.type !== 'hornetIn' || !this.battle.active[ev.owner]) continue;
+      this.cardHit(ev.owner, ev.lost);
+      if (ev.owner === this.me) {
+        this.hurt('Autsch!', ev.lost > 0 ? `Hornisse im Stock: −${ev.lost} Bienen` : 'Eine Hornisse ist in deinen Stock geflogen!');
+      } else {
+        toast(`Hornisse im Stock von <b>${esc(this.names[ev.owner])}</b>: −${ev.lost}`, this.colors[ev.owner], 'hornet');
+      }
+    }
+  }
+
+  /** Big, unmissable feedback when the local player loses bees. */
+  hurt(title, text) {
+    const el = $('#hurt');
+    el.classList.remove('hidden', 'on');
+    void el.offsetWidth;
+    el.classList.add('on');
+    el.querySelector('b').textContent = title;
+    el.querySelector('span').textContent = text;
+    clearTimeout(this.hurtTimer);
+    this.hurtTimer = setTimeout(() => el.classList.add('hidden'), 1900);
+    audio.hurt();
+    view.hurtHive(this.me);
+    navigator.vibrate?.([140, 70, 220]);
+  }
+
+  cardHit(p, lost) {
+    const card = this.cards?.[p];
+    if (!card) return;
+    card.classList.remove('hit');
+    void card.offsetWidth;
+    card.classList.add('hit');
+    if (lost > 0) {
+      const d = document.createElement('span');
+      d.className = 'dmg';
+      d.textContent = `−${lost}`;
+      card.appendChild(d);
+      setTimeout(() => d.remove(), 1300);
     }
   }
 
@@ -422,23 +555,17 @@ class BattleController {
     if (this.spin) {
       this.spin.t += dt;
       if (this.spin.t >= this.spin.next) {
-        this.spin.next = this.spin.t + 0.07 + this.spin.t * 0.05;
-        const w = WAVES[this.spin.opts[Math.floor(Math.random() * this.spin.opts.length)]];
-        this.setWaveIcon(w.icon);
-        $('#wave .wave-name').textContent = w.name;
+        this.spin.next = this.spin.t + 0.05 + this.spin.t * this.spin.t * 0.06;
         audio.tick();
       }
     }
+    if (b.event && !this.revealed && b.event.t >= EVENT_SPIN * TICK_RATE) this.reveal();
     if (b.wave) {
       const total = WAVES[b.wave.id].dur * TICK_RATE;
       const left = (b.wave.until - this.sim.tickCount) / total;
       $('#wave .wave-bar i').style.width = `${Math.max(0, left * 100)}%`;
     }
-    if (this.waveHideAt && performance.now() > this.waveHideAt) {
-      this.waveHideAt = 0;
-      $('#wave').classList.add('hidden');
-    }
-    audio.setSwarm(this.sim.beeCount);
+    audio.setSwarm(b.state === 'event' ? 0 : this.sim.beeCount);
   }
 
   async onOver() {
@@ -447,6 +574,7 @@ class BattleController {
     audio.music(false);
     audio.setSwarm(0);
     $('#wave').classList.add('hidden');
+    $('#event').classList.add('hidden');
     $('#timer').classList.add('hidden');
     view.setHover(null);
     if (w >= 0) {
@@ -494,6 +622,9 @@ class BattleController {
 
   destroy() {
     for (const off of this.offs) off();
+    clearTimeout(this.hurtTimer);
+    $('#event').classList.add('hidden');
+    $('#hurt').classList.add('hidden');
     audio.music(false);
     audio.setSwarm(0);
     if (this.net) $('#net-badge').classList.add('hidden');
@@ -517,9 +648,15 @@ class PuzzleController {
     $('#scores').classList.add('hidden');
     $('#timer').classList.add('hidden');
     $('#wave').classList.add('hidden');
+    $('#event').classList.add('hidden');
+    $('#hurt').classList.add('hidden');
     $('#countdown').classList.add('hidden');
     $('#net-badge').classList.add('hidden');
     $('#controls-hint').classList.remove('hidden');
+    $('#controls-hint').classList.toggle('touch', touchDevice);
+    $('#controls-hint').innerHTML = touchDevice
+      ? 'Über ein Feld <b>wischen</b> legt einen Pfeil &middot; <b>Tippen</b> dreht ihn'
+      : 'Feld anvisieren + <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten &middot; Ziehen &middot; Rechtsklick entfernt';
     $('#puzzle-top').classList.remove('hidden');
     $('#puzzle-bar').classList.remove('hidden');
     $('#puzzle-fail').classList.add('hidden');
@@ -683,7 +820,7 @@ function startDemo() {
   $('#hud').classList.add('hidden');
   const m = BATTLE_MAPS[Math.floor(Math.random() * BATTLE_MAPS.length)];
   setController(new BattleController({
-    map: m.id, demo: true, slots: ['ai', 'ai', 'ai', 'ai'], difficulty: 'normal', timeLimit: 1e6, target: 1e9,
+    map: m.id, demo: true, slots: ['ai', 'ai', 'ai', 'ai'], difficulty: 'normal', timeLimit: 1e6, target: 1e9, events: 'often',
   }));
 }
 
@@ -692,7 +829,7 @@ function startBattle() {
   show(null);
   const slots = [0, 1, 2, 3].map((p) => (p === 0 ? 'human' : p <= settings.aiCount ? 'ai' : 'wild'));
   setController(new BattleController({
-    map: settings.map, slots, difficulty: settings.difficulty, timeLimit: settings.timeLimit, target: settings.target, me: 0,
+    map: settings.map, slots, difficulty: settings.difficulty, timeLimit: settings.timeLimit, target: settings.target, events: settings.events, me: 0,
   }));
 }
 
@@ -770,7 +907,7 @@ $('#puzzle-grid').addEventListener('click', (e) => {
 
 function refreshSetup() {
   renderMapGrid($('#map-grid'), settings.map, (id) => { settings.map = id; saveSettings(); refreshSetup(); });
-  renderOptions($('#setup-options'), ['aiCount', 'difficulty', 'timeLimit', 'target'], settings, (k, v) => {
+  renderOptions($('#setup-options'), ['aiCount', 'difficulty', 'timeLimit', 'target', 'events'], settings, (k, v) => {
     settings[k] = v;
     saveSettings();
     refreshSetup();
@@ -864,20 +1001,69 @@ async function refreshRooms() {
   } catch { /* ignore, next refresh retries */ }
 }
 
+function saveName(n) {
+  playerName = n;
+  localStorage.setItem('kingbee.name', n);
+  const field = $('#net-name');
+  if (field) field.value = n;
+}
+
+/** Name from the online screen; empty if the player has not entered one. */
 function rememberName() {
   const n = $('#net-name').value.trim().slice(0, 16);
-  if (n) {
-    playerName = n;
-    localStorage.setItem('kingbee.name', n);
-  }
-  return playerName;
+  if (n) saveName(n);
+  return n || playerName;
 }
+
+let nameResolve = null;
+
+/**
+ * Ask for the player's name in a dialog. Resolves with the name, or null if
+ * the dialog was cancelled. Without force it resolves right away when a name
+ * is already known.
+ */
+function askName({ force = false } = {}) {
+  const known = rememberName();
+  if (known && !force) return Promise.resolve(known);
+  const modal = $('#name-modal');
+  modal.classList.remove('hidden');
+  const input = $('#name-input');
+  input.value = force ? playerName : '';
+  input.classList.remove('shake');
+  setTimeout(() => input.focus(), 50);
+  return new Promise((resolve) => { nameResolve = resolve; });
+}
+
+function closeName(result) {
+  $('#name-modal').classList.add('hidden');
+  const r = nameResolve;
+  nameResolve = null;
+  r?.(result);
+}
+
+$('#name-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = $('#name-input');
+  const n = input.value.trim().slice(0, 16);
+  if (!n) {
+    input.classList.remove('shake');
+    void input.offsetWidth;
+    input.classList.add('shake');
+    input.focus();
+    return;
+  }
+  saveName(n);
+  closeName(n);
+});
+$('#name-cancel').addEventListener('click', () => closeName(null));
 
 async function createRoom() {
   $('#net-error').textContent = '';
+  const name = await askName();
+  if (!name) return;
   try {
     await getNet().connect();
-    room = await net.createRoom(rememberName());
+    room = await net.createRoom(name);
     openRoom();
   } catch (e) {
     $('#net-error').textContent = netError(e);
@@ -888,9 +1074,11 @@ async function joinRoom(code) {
   code = String(code || '').trim().toUpperCase();
   if (code.length !== 4) { $('#net-error').textContent = 'Der Raum-Code hat 4 Buchstaben.'; return; }
   $('#net-error').textContent = '';
+  const name = await askName();
+  if (!name) return;
   try {
     await getNet().connect();
-    room = await net.joinRoom(code, rememberName());
+    room = await net.joinRoom(code, name);
     openRoom();
   } catch (e) {
     $('#net-error').textContent = netError(e);
@@ -950,13 +1138,15 @@ function renderRoom() {
     if (s.type !== 'human' && me >= 0) {
       ctrlHtml += `<button class="btn small" data-move="${p}">Hierher</button>`;
     }
-    const tags = p === me ? '<span class="tag">Du</span>' : '';
+    const tags = p === me
+      ? `<button class="mini-btn rename" data-rename title="Namen ändern">${icon('edit')}</button><span class="tag">Du</span>`
+      : '';
     return `<div class="seat ${p === me ? 'me' : ''}" style="--c:${color}">
       <span class="sh">${icon(ic)}</span>
       <span class="sn"><b>${title}</b><small>${small}</small></span>${tags}${ctrlHtml}</div>`;
   }).join('');
   renderMapGrid($('#room-maps'), room.settings.map, (id) => net.updateRoom({ ...room.settings, map: id }), !host);
-  renderOptions($('#room-options'), ['difficulty', 'timeLimit', 'target'], room.settings, (k, v) => {
+  renderOptions($('#room-options'), ['difficulty', 'timeLimit', 'target', 'events'], { events: 'normal', ...room.settings }, (k, v) => {
     net.updateRoom({ ...room.settings, [k]: v });
   }, !host);
   const humans = room.seats.filter((s) => s.type === 'human').length;
@@ -967,7 +1157,12 @@ function renderRoom() {
     : room.state === 'playing' ? 'Hier läuft gerade ein Spiel …' : 'Warte, bis der Gastgeber das Spiel startet …';
 }
 
-$('#room-seats').addEventListener('click', (e) => {
+$('#room-seats').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-rename]')) {
+    const n = await askName({ force: true });
+    if (n) net?.setName(n).catch((err) => toast(esc(netError(err)), '#c62828', 'x'));
+    return;
+  }
   const t = e.target.closest('button[data-type]');
   if (t) { net.setSeat(Number(t.dataset.seat), t.dataset.type).catch((err) => toast(esc(netError(err)), '#c62828', 'x')); return; }
   const m = e.target.closest('button[data-move]');
@@ -1008,6 +1203,7 @@ function startNetBattle(g) {
     difficulty: g.settings.difficulty,
     timeLimit: g.settings.timeLimit,
     target: g.settings.target,
+    events: g.settings.events || 'normal',
     seed: g.seed,
     me: mySeat(),
     net,
@@ -1021,56 +1217,79 @@ const stage = $('#stage');
 let hoverTile = null;
 let drag = null;
 
+const SWIPE_MIN = 14; // px before a drag counts as a swipe
+
+function inputBlocked() {
+  return !ctrl || !ctrl.interactive || paused || ctrl.frozen;
+}
+
 function refreshHover() {
-  if (!ctrl || !ctrl.interactive || paused || !hoverTile) {
+  if (inputBlocked()) {
+    view.setHover(null);
+    return;
+  }
+  if (drag && drag.tile && drag.button !== 2) {
+    view.setHover(drag.tile, ctrl.color, ctrl.canPlace(drag.tile.x, drag.tile.y), drag.dir);
+    return;
+  }
+  if (!hoverTile || drag) {
     view.setHover(null);
     return;
   }
   view.setHover(hoverTile, ctrl.color, ctrl.canPlace(hoverTile.x, hoverTile.y));
 }
 
-stage.addEventListener('pointermove', (e) => { hoverTile = view.pickTile(e.clientX, e.clientY); });
+stage.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'mouse' || !drag) hoverTile = view.pickTile(e.clientX, e.clientY);
+  if (drag && drag.tile) {
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    drag.dir = Math.hypot(dx, dy) > SWIPE_MIN ? view.dirFromScreen(drag.tile, dx, dy) : null;
+  }
+});
 stage.addEventListener('pointerleave', () => { hoverTile = null; });
 stage.addEventListener('contextmenu', (e) => e.preventDefault());
 stage.addEventListener('pointerdown', (e) => {
   audio.ensure();
-  if (!ctrl || !ctrl.interactive || paused) return;
+  if (inputBlocked()) return;
   const tile = view.pickTile(e.clientX, e.clientY);
   hoverTile = tile;
-  drag = { tile, x: e.clientX, y: e.clientY, button: e.button };
+  drag = { tile, x: e.clientX, y: e.clientY, button: e.button, dir: null };
   stage.setPointerCapture(e.pointerId);
 });
+stage.addEventListener('pointercancel', () => { drag = null; });
 stage.addEventListener('pointerup', (e) => {
   const d = drag;
   drag = null;
-  if (!d || !d.tile || !ctrl || !ctrl.interactive || paused) return;
+  if (e.pointerType !== 'mouse') hoverTile = null;
+  if (!d || !d.tile || inputBlocked()) return;
   if (d.button === 2) { ctrl.remove(d.tile.x, d.tile.y); return; }
   const dx = e.clientX - d.x;
   const dy = e.clientY - d.y;
-  if (Math.hypot(dx, dy) > 16) {
-    const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
-    ctrl.place(d.tile.x, d.tile.y, dir);
-  } else {
-    ctrl.tap(d.tile.x, d.tile.y);
-  }
-  if (e.pointerType !== 'mouse') hoverTile = null;
+  if (Math.hypot(dx, dy) > SWIPE_MIN) ctrl.place(d.tile.x, d.tile.y, view.dirFromScreen(d.tile, dx, dy));
+  else ctrl.tap(d.tile.x, d.tile.y);
 });
 
+// keys point in screen directions (the board may be rotated on phones)
 const KEY_DIR = {
-  w: 0, W: 0, ArrowUp: 0,
-  d: 1, D: 1, ArrowRight: 1,
-  s: 2, S: 2, ArrowDown: 2,
-  a: 3, A: 3, ArrowLeft: 3,
+  w: [0, -1], W: [0, -1], ArrowUp: [0, -1],
+  d: [1, 0], D: [1, 0], ArrowRight: [1, 0],
+  s: [0, 1], S: [0, 1], ArrowDown: [0, 1],
+  a: [-1, 0], A: [-1, 0], ArrowLeft: [-1, 0],
 };
 
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
+  if (e.key === 'Escape' && nameResolve) { closeName(null); return; }
   if (e.key === 'm' || e.key === 'M') { updateMute(audio.toggleMute()); return; }
   if (e.key === 'Escape') { togglePause(); return; }
   if (!ctrl || ctrl.demo || paused) return;
   if (e.key in KEY_DIR) {
     e.preventDefault();
-    if (ctrl.interactive && hoverTile) ctrl.place(hoverTile.x, hoverTile.y, KEY_DIR[e.key]);
+    if (!inputBlocked() && hoverTile) {
+      const [sx, sy] = KEY_DIR[e.key];
+      ctrl.place(hoverTile.x, hoverTile.y, view.dirFromScreen(hoverTile, sx, sy));
+    }
     return;
   }
   if (e.key === ' ') { e.preventDefault(); if (ctrl.interactive) ctrl.primary?.(); }

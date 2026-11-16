@@ -20,6 +20,18 @@
         <div class="wave-bar"><i></i></div>
       </div>
       <div id="toasts"></div>
+      <div id="event" class="hidden">
+        <div class="ev-fx"></div>
+        <div class="ev-rays"></div>
+        <div class="ev-card">
+          <div class="ev-head">Ereignis!</div>
+          <div class="ev-reel"><div class="ev-strip"></div></div>
+          <div class="ev-desc"></div>
+        </div>
+      </div>
+      <div id="hurt" class="hidden">
+        <div class="hurt-text"><b></b><span></span></div>
+      </div>
       <div id="countdown" class="hidden"></div>
       <div id="net-badge" class="hidden"><span class="dot"></span><span class="txt"></span></div>
       <div id="puzzle-top" class="hidden">
@@ -38,6 +50,19 @@
       <div id="controls-hint">Feld anvisieren + <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten &middot; Wischen &middot; Rechtsklick entfernt</div>
       <button id="pause-btn" class="icon-btn" data-icon="pause" title="Pause (Esc)"></button>
       <button id="mute-btn" class="icon-btn" title="Ton (M)"></button>
+    </div>
+
+    <!-- name dialog (online) -->
+    <div id="name-modal" class="hidden">
+      <form class="panel narrow" id="name-form" autocomplete="off">
+        <header class="panel-head center"><h2>Wie heißt du?</h2></header>
+        <p class="sub">Unter diesem Namen sehen dich deine Mitspieler.</p>
+        <input id="name-input" class="field" maxlength="16" placeholder="Dein Name" spellcheck="false" enterkeyhint="done" />
+        <div class="row">
+          <button type="button" class="btn" id="name-cancel" data-icon="x">Abbrechen</button>
+          <button type="submit" class="btn big primary" id="name-ok" data-icon="check">Weiter</button>
+        </div>
+      </form>
     </div>
 
     <!-- ========================================================= SCREENS -->
@@ -71,7 +96,7 @@
         </nav>
         <div class="menu-foot">
           <button id="menu-mute" class="pill"></button>
-          <span class="ver">KING BEE &middot; v0.3</span>
+          <span class="ver">KING BEE &middot; v0.4</span>
         </div>
       </section>
 
@@ -115,7 +140,7 @@
           <div class="online-grid">
             <div class="box">
               <h3 data-icon="bee">Dein Name</h3>
-              <input id="net-name" class="field" maxlength="16" autocomplete="off" spellcheck="false" />
+              <input id="net-name" class="field" maxlength="16" placeholder="Dein Name" autocomplete="off" spellcheck="false" />
               <button id="net-create" class="btn big primary" data-icon="plus">Raum erstellen</button>
             </div>
             <div class="box">
@@ -167,11 +192,11 @@
           </header>
           <div class="help-grid">
             <div class="hcard"><span class="hic" data-icon="flower"></span><h3>Blüten</h3><p>Aus den Blüten schwärmen ständig Bienen. Sie fliegen geradeaus und biegen an Wänden zuerst <b>rechts</b> ab, sonst links, sonst zurück.</p></div>
-            <div class="hcard"><span class="hic" data-icon="arrow"></span><h3>Pfeile</h3><p>Maus auf ein Feld und <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten drücken. Am Handy: übers Feld wischen. Du hast <b>3 Pfeile</b>, ein vierter ersetzt den ältesten.</p></div>
+            <div class="hcard"><span class="hic" data-icon="arrow"></span><h3>Pfeile</h3><p>Maus auf ein Feld und <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten drücken. Am Handy: über ein Feld in die gewünschte Richtung wischen, Tippen dreht den Pfeil. Du hast <b>3 Pfeile</b>, ein vierter ersetzt den ältesten.</p></div>
             <div class="hcard"><span class="hic" data-icon="hive"></span><h3>Bienenstock</h3><p>Jede Biene in deinem Stock zählt. Ist er voll, <b>schlüpft die neue Königin</b> und du gewinnst. Sonst gewinnt bei Zeitende der volle Stock.</p></div>
             <div class="hcard"><span class="hic" data-icon="hornet"></span><h3>Hornissen</h3><p>Hornissen fressen Bienen. Fliegt eine in einen Stock, verliert er <b>ein Drittel</b> seiner Bienen. Sie beschädigen auch Pfeile.</p></div>
             <div class="hcard"><span class="hic" data-icon="sparkle"></span><h3>Besondere Bienen</h3><p><b>Goldbienen</b> zählen 10. <b>Blütenbienen</b> (rosa) lösen einen Bonus aus: Nektar, Raubzug, Wachsschild oder Duftspur.</p></div>
-            <div class="hcard"><span class="hic" data-icon="swirl"></span><h3>Wellen</h3><p>Das Ereignis-Rad dreht sich regelmäßig: Schwarmzeit, Hornissen-Alarm, Rückenwind, Honigregen, Goldfieber, Windstoß, Imker-Rauch, Wirbelwind.</p></div>
+            <div class="hcard"><span class="hic" data-icon="swirl"></span><h3>Ereignisse</h3><p>Regelmäßig hält das Spiel kurz an und das Ereignis-Rad dreht sich: Schwarmzeit, Hornissen-Alarm, Rückenwind, Zeitlupe, Goldfieber, Windstoß, Imker-Rauch, Wirbelwind, <b>Alle umziehen</b>, Blütenwechsel, Verkehrte Welt, Pfeilregen. Wie oft, stellst du vor dem Spiel ein.</p></div>
           </div>
         </div>
       </section>

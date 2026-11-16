@@ -5,20 +5,40 @@ import { makeRng } from './rng.js';
 const sec = (s) => Math.round(s * TICK_RATE);
 
 /**
- * Global "waves" that hit the whole board. Announced with a roulette, then
- * applied. `dur` is how long the effect lasts (0 = instant).
+ * Global events ("waves") that hit the whole board. When one is due the game
+ * pauses (state 'event'), a roulette spins in the middle of the screen, the
+ * effect is applied and animated, then the game resumes.
+ * `dur` = how long the effect lasts after resuming (0 = instant),
+ * `anim` = seconds the pause continues after the effect is applied.
  */
 export const WAVES = {
-  swarm:   { name: 'Schwarmzeit!', desc: 'Die Blüten sprudeln über vor Bienen.', icon: 'bee', dur: 6 },
-  hornets: { name: 'Hornissen-Alarm!', desc: 'Ein ganzes Hornissennest fliegt aus.', icon: 'hornet', dur: 5 },
-  fast:    { name: 'Rückenwind', desc: 'Alles fliegt schneller.', icon: 'fast', dur: 10 },
-  slow:    { name: 'Honigregen', desc: 'Klebrige Flügel – alles wird langsam.', icon: 'drop', dur: 10 },
-  gold:    { name: 'Goldfieber', desc: 'Goldbienen bringen 10 Punkte!', icon: 'sparkle', dur: 5 },
-  wind:    { name: 'Windstoß', desc: 'Alle Pfeile werden weggeweht.', icon: 'wind', dur: 0 },
-  smoke:   { name: 'Imker-Rauch', desc: 'Der Rauch vertreibt alle Hornissen.', icon: 'smoke', dur: 0 },
-  swirl:   { name: 'Wirbelwind', desc: 'Alle drehen um!', icon: 'swirl', dur: 0 },
+  swarm:   { name: 'Schwarmzeit!', desc: 'Die Blüten sprudeln über vor Bienen.', icon: 'bee', dur: 6, anim: 0.8 },
+  hornets: { name: 'Hornissen-Alarm!', desc: 'Ein ganzes Hornissennest fliegt aus.', icon: 'hornet', dur: 5, anim: 0.8 },
+  fast:    { name: 'Rückenwind', desc: 'Alles fliegt doppelt so schnell.', icon: 'fast', dur: 10, anim: 0.8 },
+  slow:    { name: 'Zeitlupe', desc: 'Honigregen: alles fliegt ganz langsam.', icon: 'drop', dur: 10, anim: 0.9 },
+  gold:    { name: 'Goldfieber', desc: 'Goldbienen bringen 10 Punkte!', icon: 'sparkle', dur: 6, anim: 0.8 },
+  wind:    { name: 'Windstoß', desc: 'Alle Pfeile werden weggeweht.', icon: 'wind', dur: 0, anim: 1.1 },
+  smoke:   { name: 'Imker-Rauch', desc: 'Der Rauch vertreibt alle Hornissen.', icon: 'smoke', dur: 0, anim: 1.1 },
+  swirl:   { name: 'Wirbelwind', desc: 'Alle Tiere drehen um!', icon: 'swirl', dur: 0, anim: 1.0 },
+  move:    { name: 'Alle umziehen!', desc: 'Die Bienenstöcke tauschen ihre Plätze.', icon: 'shuffle', dur: 0, anim: 2.3 },
+  bloom:   { name: 'Blütenwechsel', desc: 'Die Blüten schicken ihre Bienen in neue Richtungen.', icon: 'flower', dur: 12, anim: 1.3 },
+  flip:    { name: 'Verkehrte Welt', desc: 'Alle Pfeile zeigen in die Gegenrichtung.', icon: 'flip', dur: 0, anim: 1.1 },
+  arrows:  { name: 'Pfeilregen', desc: '15 Sekunden lang 5 Pfeile für alle.', icon: 'arrows', dur: 15, anim: 0.8 },
 };
-const WAVE_POOL = ['swarm', 'swarm', 'hornets', 'fast', 'slow', 'gold', 'wind', 'smoke', 'swirl'];
+const WAVE_POOL = ['swarm', 'swarm', 'hornets', 'fast', 'slow', 'gold', 'wind', 'smoke', 'swirl', 'move', 'move', 'bloom', 'flip', 'arrows'];
+
+/** Seconds between two events for each frequency setting (null = no events). */
+export const EVENT_FREQ = {
+  off: null,
+  rare: [45, 60],
+  normal: [24, 34],
+  often: [14, 20],
+  chaos: [7, 11],
+};
+
+/** Timing of the event pause in seconds: roulette spin, then reveal. */
+export const EVENT_SPIN = 2.4;
+export const EVENT_REVEAL = 0.9;
 
 /** Personal bonuses when a pollen bee (pink) enters a hive. */
 export const BONUSES = {
@@ -44,6 +64,7 @@ export class Battle {
       timeLimit: 180,
       target: 150,
       seed: (Math.random() * 1e9) | 0,
+      events: 'normal',
       ...cfg,
     };
     this.board = board;
@@ -60,9 +81,11 @@ export class Battle {
     this.winner = -1;
     this.spawnTimers = board.spawners.map((_, i) => sec(0.4 + i * 0.25));
     this.hornetTimer = sec(this.solo ? 5 : 8);
-    this.waveTimer = sec(22);
-    this.pendingWave = null; // {id, at}
-    this.wave = null;        // {id, until}
+    this.freq = EVENT_FREQ[this.cfg.events] === undefined ? EVENT_FREQ.normal : EVENT_FREQ[this.cfg.events];
+    this.waveTimer = this.freq ? sec(Math.min(22, this.freq[0] + 2)) : Infinity;
+    this.event = null;       // running event pause {id, t, applyAt, endAt}
+    this.wave = null;        // effect with a duration {id, until}
+    this.hiveVersion = 0;    // bumped whenever hives change places
     this.hornetQueue = 0;
     this.magnet = null;      // {owner, until, dirs}
     this.feed = [];          // UI notifications {kind, ...}
@@ -83,11 +106,13 @@ export class Battle {
       if (--this.countdown <= 0) this.state = 'running';
       return [];
     }
+    if (this.state === 'event') return this.tickEvent();
     if (this.state !== 'running') return [];
     const sim = this.sim;
     const t = sim.tickCount;
 
     this.updateWaves(t);
+    if (this.state === 'event') return [];
     this.updateSpawns(t);
     // hornets get bored and fly off after a while
     for (const e of sim.entities) {
@@ -165,29 +190,54 @@ export class Battle {
   }
 
   updateWaves(t) {
-    const sim = this.sim;
-    if (this.wave && t >= this.wave.until) {
-      if (this.wave.id === 'fast' || this.wave.id === 'slow') sim.setSpeedMode('normal');
-      this.wave = null;
-      this.feed.push({ kind: 'waveEnd' });
-    }
-    if (this.pendingWave && t >= this.pendingWave.at) {
-      const id = this.pendingWave.id;
-      this.pendingWave = null;
-      this.startWave(id);
-    }
-    if (!this.pendingWave && !this.wave && --this.waveTimer <= 0) {
-      this.waveTimer = sec(this.rng.range(22, 32));
+    if (this.wave && t >= this.wave.until) this.endWave();
+    if (this.freq && !this.wave && --this.waveTimer <= 0) {
+      this.waveTimer = sec(this.rng.range(this.freq[0], this.freq[1]));
       const id = this.rng.pick(WAVE_POOL);
-      this.pendingWave = { id, at: t + sec(2.2) };
-      this.feed.push({ kind: 'roulette', id, options: Object.keys(WAVES) });
+      const applyAt = sec(EVENT_SPIN + EVENT_REVEAL * 0.6);
+      this.event = { id, t: 0, applyAt, endAt: applyAt + sec(WAVES[id].anim) };
+      this.state = 'event';
+      this.feed.push({ kind: 'eventStart', id, options: Object.keys(WAVES) });
     }
+  }
+
+  /** One tick of the event pause: nothing moves, the effect lands mid-way. */
+  tickEvent() {
+    const ev = this.event;
+    ev.t++;
+    if (ev.t === 1) {
+      // freeze render interpolation while paused
+      for (const e of this.sim.entities) { e.pwx = e.wx; e.pwy = e.wy; }
+    }
+    if (ev.t === ev.applyAt) this.startWave(ev.id);
+    if (ev.t >= ev.endAt) {
+      this.event = null;
+      this.state = 'running';
+      this.feed.push({ kind: 'eventEnd', id: ev.id });
+    }
+    return this.sim.events.splice(0);
+  }
+
+  endWave() {
+    const sim = this.sim;
+    const id = this.wave.id;
+    if (id === 'fast' || id === 'slow') sim.setSpeedMode('normal');
+    if (id === 'arrows') {
+      sim.maxArrows = 3;
+      for (const pl of sim.players) {
+        while (pl.arrowCells.length > sim.maxArrows) sim.removeArrowAt(pl.arrowCells[0], 'expired');
+      }
+    }
+    this.wave = null;
+    const info = { kind: 'waveEnd', id };
+    if (id === 'bloom') info.turns = this.restoreFlowers();
+    this.feed.push(info);
   }
 
   startWave(id) {
     const sim = this.sim;
     const w = WAVES[id];
-    this.feed.push({ kind: 'wave', id });
+    const info = { kind: 'wave', id };
     if (w.dur > 0) this.wave = { id, until: sim.tickCount + sec(w.dur) };
     switch (id) {
       case 'hornets': this.hornetQueue = 4; this.hornetTimer = 1; break;
@@ -203,8 +253,72 @@ export class Battle {
         }
         break;
       case 'swirl': sim.reverseAll(); break;
+      case 'move': info.moves = this.shuffleHives(); break;
+      case 'bloom': info.turns = this.turnFlowers(); break;
+      case 'flip':
+        for (const a of sim.arrows) if (a) a.dir = (a.dir + 2) & 3;
+        break;
+      case 'arrows': sim.maxArrows = 5; break;
       default: break;
     }
+    this.feed.push(info);
+  }
+
+  /** "Everybody move": every hive lands on another hive's spot. */
+  shuffleHives() {
+    const board = this.board;
+    const hives = board.hives;
+    const n = hives.length;
+    const perm = [...Array(n).keys()];
+    for (let attempt = 0; attempt < 30; attempt++) {
+      for (let i = n - 1; i > 0; i--) {
+        const j = this.rng.int(i + 1);
+        [perm[i], perm[j]] = [perm[j], perm[i]];
+      }
+      if (perm.every((p, i) => p !== i)) break;
+    }
+    const owners = hives.map((h) => h.owner);
+    const moves = [];
+    for (let i = 0; i < n; i++) {
+      const to = hives[perm[i]];
+      moves.push({ owner: owners[i], fx: hives[i].x, fy: hives[i].y, tx: to.x, ty: to.y });
+      board.owner[board.idx(to.x, to.y)] = owners[i];
+    }
+    for (const h of hives) h.owner = board.owner[board.idx(h.x, h.y)];
+    this.hiveVersion++;
+    if (this.magnet) this.magnet.dirs = this.magnetDirs(this.magnet.owner);
+    return moves;
+  }
+
+  /** Every flower turns to another open direction (until the wave ends). */
+  turnFlowers() {
+    const b = this.board;
+    this.flowerDirs = b.spawners.map((s) => s.dir);
+    return b.spawners.map((s) => {
+      const from = s.dir;
+      const open = [1, 2, 3].map((k) => (from + k) & 3).filter((d) => !b.hasWall(s.x, s.y, d));
+      if (open.length) s.dir = open[this.rng.int(open.length)];
+      return { x: s.x, y: s.y, from, to: s.dir };
+    });
+  }
+
+  restoreFlowers() {
+    const turns = this.board.spawners.map((s, i) => {
+      const from = s.dir;
+      s.dir = this.flowerDirs[i];
+      return { x: s.x, y: s.y, from, to: s.dir };
+    });
+    this.flowerDirs = null;
+    return turns;
+  }
+
+  magnetDirs(owner) {
+    const hive = this.board.hives.find((h) => h.owner === owner);
+    return this.board.spawners.map((s) => {
+      const dx = hive.x - s.x, dy = hive.y - s.y;
+      if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 1 : 3;
+      return dy > 0 ? 2 : 0;
+    });
   }
 
   applyBonus(owner) {
@@ -234,13 +348,7 @@ export class Battle {
         pl.shieldUntil = sim.tickCount + sec(15);
         break;
       case 'magnet': {
-        const hive = this.board.hives.find((h) => h.owner === owner);
-        const dirs = this.board.spawners.map((s) => {
-          const dx = hive.x - s.x, dy = hive.y - s.y;
-          if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? 1 : 3;
-          return dy > 0 ? 2 : 0;
-        });
-        this.magnet = { owner, until: sim.tickCount + sec(8), dirs };
+        this.magnet = { owner, until: sim.tickCount + sec(8), dirs: this.magnetDirs(owner) };
         break;
       }
       default: break;

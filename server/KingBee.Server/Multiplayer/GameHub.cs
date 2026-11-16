@@ -105,6 +105,21 @@ public sealed class GameHub(RoomManager rooms, ILogger<GameHub> log) : Hub
         await Clients.Group(room.GroupName).SendAsync("Room", view);
     }
 
+    /// <summary>Change the own display name (lobby only).</summary>
+    public async Task SetName(string name)
+    {
+        var room = rooms.RoomOf(Me) ?? throw new HubException("Du bist in keinem Raum.");
+        RoomView view;
+        lock (room.Sync)
+        {
+            var seat = room.SeatOf(Me);
+            if (seat < 0 || room.Playing) return;
+            room.Seats[seat].Name = RoomManager.CleanName(name);
+            view = room.ToView();
+        }
+        await Clients.Group(room.GroupName).SendAsync("Room", view);
+    }
+
     /// <summary>A player moves to another free seat (= other hive / colour).</summary>
     public async Task MoveToSeat(int seat)
     {
@@ -142,8 +157,9 @@ public sealed class GameHub(RoomManager rooms, ILogger<GameHub> log) : Hub
             start = new GameStart(RandomNumberGenerator.GetInt32(1, int.MaxValue), room.Settings, slots, names);
             room.Playing = true;
             room.Frame = 0;
-            // countdown (3 s) + time limit + generous margin, 20 frames per second
-            room.MaxFrames = (room.Settings.TimeLimit + 3) * 20 + 400;
+            // countdown (3 s) + time limit, doubled because event pauses stop the
+            // game clock, plus a margin; 20 frames per second
+            room.MaxFrames = (room.Settings.TimeLimit + 3) * 20 * 2 + 600;
             room.PendingInputs.Clear();
             room.Hashes.Clear();
             view = room.ToView();

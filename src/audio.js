@@ -178,6 +178,27 @@ class Audio {
     seq.forEach((s, i) => this.tone({ f: 392 * 2 ** (s / 12), dur: i === seq.length - 1 ? 0.9 : 0.16, type: 'triangle', vol: 0.22, delay: i * 0.13 }));
     seq.forEach((s, i) => this.tone({ f: 196 * 2 ** (s / 12), dur: 0.16, type: 'square', vol: 0.05, delay: i * 0.13 }));
   }
+  /** Big alarm when a hornet raids the own hive. */
+  hurt() {
+    this.tone({ f: 220, f2: 55, dur: 0.9, type: 'sawtooth', vol: 0.3 });
+    this.tone({ f: 233, f2: 58, dur: 0.9, type: 'square', vol: 0.12 });
+    [0, 0.22].forEach((d) => this.tone({ f: 880, f2: 660, dur: 0.16, type: 'square', vol: 0.12, delay: d }));
+    this.noise({ dur: 0.6, vol: 0.45, freq: 300 });
+  }
+  /** Event pause starts: drum roll. */
+  eventStart() {
+    this.noise({ dur: 0.25, vol: 0.3, freq: 180, type: 'lowpass' });
+    [0, 5, 9].forEach((s, i) => this.tone({ f: 392 * 2 ** (s / 12), dur: 0.1, type: 'square', vol: 0.08, delay: i * 0.06 }));
+  }
+  /** Event revealed: fanfare-like stinger. */
+  reveal() {
+    [0, 4, 7, 12].forEach((s, i) => this.tone({ f: 523 * 2 ** (s / 12), dur: i === 3 ? 0.35 : 0.12, type: 'square', vol: 0.1, delay: i * 0.07 }));
+    this.noise({ dur: 0.3, vol: 0.2, freq: 3000, q: 0.7, delay: 0.2 });
+  }
+  whoosh() {
+    this.noise({ dur: 0.7, vol: 0.35, freq: 900, q: 0.6 });
+    this.tone({ f: 200, f2: 600, dur: 0.6, type: 'sine', vol: 0.08 });
+  }
   countdown(final) { this.tone({ f: final ? 1046 : 523, dur: final ? 0.35 : 0.15, type: 'square', vol: 0.12 }); }
 }
 

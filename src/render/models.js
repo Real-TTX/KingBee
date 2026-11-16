@@ -272,6 +272,7 @@ export function makeFlower(index, dirYaw) {
   leafPivot.rotation.y = dirYaw;
   group.add(leafPivot);
   group.userData.flower = mesh;
+  group.userData.pivot = leafPivot;
   return group;
 }
 

@@ -51,6 +51,7 @@ export class Net {
   leaveRoom() { return this.connected ? this.call('LeaveRoom') : Promise.resolve(); }
   updateRoom(settings) { return this.call('UpdateRoom', settings); }
   setSeat(seat, type) { return this.call('SetSeat', seat, type); }
+  setName(name) { return this.call('SetName', name); }
   moveToSeat(seat) { return this.call('MoveToSeat', seat); }
   startGame() { return this.call('StartGame'); }
   reportGameOver() { return this.call('ReportGameOver').catch(() => {}); }

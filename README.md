@@ -36,6 +36,14 @@ Wer die meisten Bienen in seinen Stock lotst, gewinnt. Wer eine Hornisse in den 
 <td align="center"><b>Sieg</b>: die neue Königin schlüpft aus deinem Stock</td>
 </tr>
 <tr>
+<td width="50%"><img src="docs/images/event.png" alt="Ereignis-Rad"></td>
+<td width="50%"><img src="docs/images/event-move.png" alt="Alle umziehen"></td>
+</tr>
+<tr>
+<td align="center"><b>Ereignis</b>: das Spiel hält an, das Rad dreht sich in der Mitte</td>
+<td align="center"><b>Alle umziehen!</b>: die Bienenstöcke fliegen auf neue Plätze</td>
+</tr>
+<tr>
 <td width="50%"><img src="docs/images/puzzle.png" alt="Puzzle-Modus"></td>
 <td width="50%"><img src="docs/images/online-lobby.png" alt="Online-Lobby"></td>
 </tr>
@@ -51,7 +59,7 @@ Wer die meisten Bienen in seinen Stock lotst, gewinnt. Wer eine Hornisse in den 
 |---|---|
 | **Schwarm-Kampf** | Du gegen 1–3 KI-Gegner (Leicht / Normal / Schwer) auf 6 Karten. Erster mit vollem Stock gewinnt, sonst der Führende bei Zeitende. |
 | **Solo** | Fülle deinen Stock, bevor die Zeit abläuft. Die anderen Stöcke gehören Wildbienen. |
-| **Online** | Bis zu 4 Spieler, freie Plätze mit KI auffüllen. Beitritt per 4-Buchstaben-Code oder Einladungslink. |
+| **Online** | Bis zu 4 Spieler, freie Plätze mit KI auffüllen. Beitritt per 4-Buchstaben-Code oder Einladungslink, beim ersten Mal wird nach deinem Namen gefragt. |
 | **Puzzle** | Pfeile legen, Start drücken: Jede Biene muss heim, keine darf gefressen werden. 12 Level mit steigender Schwierigkeit. |
 
 ## Die Regeln in 30 Sekunden
@@ -62,25 +70,33 @@ Wer die meisten Bienen in seinen Stock lotst, gewinnt. Wer eine Hornisse in den 
 - **Löcher** verschlucken alles, was hineinfliegt.
 - **Goldbienen** zählen 10 Punkte. **Blütenbienen** (rosa) bringen einen Bonus: Nektar, Raubzug, Wachsschild oder Duftspur.
 
-### Wellen
+### Ereignisse
 
-Alle 20–30 Sekunden dreht sich das Ereignis-Rad:
+Regelmäßig **hält das Spiel kurz an** und in der Bildmitte dreht sich das Ereignis-Rad. Jedes Ereignis hat eine eigene Animation,
+danach geht es weiter. Wie oft das passiert, stellst du vor dem Spiel ein: **Aus, Selten, Normal, Oft oder Chaos**.
 
-| Welle | Effekt |
+| Ereignis | Effekt |
 |---|---|
 | Schwarmzeit | Die Blüten sprudeln über vor Bienen |
 | Hornissen-Alarm | Ein ganzes Nest fliegt aus |
-| Rückenwind / Honigregen | Alles wird schneller bzw. klebrig langsam |
+| Rückenwind | Alles fliegt doppelt so schnell |
+| Zeitlupe | Honigregen: alles fliegt ganz langsam |
 | Goldfieber | Viele Goldbienen |
-| Windstoß | Alle Pfeile werden weggeweht |
+| Windstoß | Alle Pfeile werden vom Brett geweht |
 | Imker-Rauch | Alle Hornissen verschwinden |
 | Wirbelwind | Alle Tiere drehen um |
+| **Alle umziehen!** | Die Bienenstöcke heben ab und landen auf zufälligen neuen Plätzen |
+| Blütenwechsel | Die Blüten schicken ihre Bienen 12 Sekunden lang in neue Richtungen |
+| Verkehrte Welt | Alle Pfeile drehen sich in die Gegenrichtung |
+| Pfeilregen | 15 Sekunden lang 5 statt 3 Pfeile für alle |
+
+Fliegt eine Hornisse in deinen Stock, ist das nicht zu übersehen: roter Bildschirmrand, großes „Autsch!“, wackelnde Punkteanzeige und auf dem Handy Vibration.
 
 ### Steuerung
 
 | Aktion | Maus / Tastatur | Touch |
 |---|---|---|
-| Pfeil legen | Feld anvisieren + <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten | Über das Feld wischen |
+| Pfeil legen | Feld anvisieren + <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten, oder ziehen | Über das Feld in die Richtung wischen (mit Vorschau) |
 | Pfeil drehen | Klick auf eigenen Pfeil | Tippen |
 | Pfeil entfernen | Rechtsklick | – |
 | Puzzle starten / stoppen | <kbd>Leertaste</kbd> | Button |
@@ -88,7 +104,7 @@ Alle 20–30 Sekunden dreht sich das Ereignis-Rad:
 
 <div align="center">
 <img src="docs/images/mobile.png" alt="King Bee auf dem Handy" width="260">
-<br><sub>Läuft auch auf dem Handy</sub>
+<br><sub>Auf dem Handy im Hochformat dreht sich das Brett, damit die Felder groß genug zum Wischen sind</sub>
 </div>
 
 ## Schnellstart

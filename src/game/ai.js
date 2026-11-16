@@ -19,10 +19,17 @@ export class AIPlayer {
     this.owner = owner;
     this.p = PROFILES[difficulty] || PROFILES.normal;
     this.rng = battle.rng;
-    const hive = battle.board.hives.find((h) => h.owner === owner);
-    this.dist = battle.board.distanceField(hive.x, hive.y);
+    this.refreshHive();
     this.timer = this.nextDelay() + TICK_RATE;
     this.tmp = { cells: [], end: 'open', steps: 0, hiveOwner: -1 };
+  }
+
+  /** Distance field towards our hive; recomputed when hives swap places. */
+  refreshHive() {
+    const b = this.battle;
+    const hive = b.board.hives.find((h) => h.owner === this.owner);
+    this.dist = b.board.distanceField(hive.x, hive.y);
+    this.hiveVersion = b.hiveVersion;
   }
 
   nextDelay() {
@@ -31,6 +38,7 @@ export class AIPlayer {
   }
 
   update() {
+    if (this.hiveVersion !== this.battle.hiveVersion) this.refreshHive();
     if (--this.timer > 0) return;
     this.timer = this.nextDelay();
     if (this.defend()) return;

@@ -41,6 +41,11 @@ const P = {
   link: '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   enter: '<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H8"/>',
+  shuffle: '<path d="M3 7h3.5c4 0 6 10 10 10H21M3 17h3.5c1.6 0 2.8-1.6 3.8-3.6M13.7 9.6C14.7 8 15.6 7 17 7h4"/><path d="M18.5 4.5L21 7l-2.5 2.5M18.5 14.5L21 17l-2.5 2.5"/>',
+  flip: '<path d="M7 20V5M7 5L3.5 8.5M7 5l3.5 3.5M17 4v15M17 19l-3.5-3.5M17 19l3.5-3.5"/>',
+  arrows: '<path d="M6 3l3.5 4H7.5v5h-3V7h-2z" fill="currentColor"/><path d="M17.5 6l3.5 4H19v5h-3v-5h-2z" fill="currentColor"/><path d="M11.5 11l3.5 4H13v6h-3v-6H8z" fill="currentColor"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+  alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.01"/>',
   trophy: '<path d="M7 4h10v5a5 5 0 01-10 0z"/><path d="M7 6H4v1.5A3.5 3.5 0 007.5 11M17 6h3v1.5a3.5 3.5 0 01-3.5 3.5M12 14v3M8 21h8M9 17h6v4H9z"/>',
 };
 

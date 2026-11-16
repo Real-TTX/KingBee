@@ -49,6 +49,9 @@ export class View {
     this.scene.fog = new THREE.Fog('#d4f0ff', 34, 110);
     this.camera = new THREE.PerspectiveCamera(36, 1, 0.1, 400);
     this.camBase = { pos: new THREE.Vector3(0, 12, 9), look: new THREE.Vector3() };
+    this.camBack = new THREE.Vector3(0, 0, 1); // horizontal direction from board to camera
+    this.camYaw = 0;
+    this.portrait = false;
     this.camAnim = null;
     this.shake = 0;
 
@@ -89,6 +92,12 @@ export class View {
     this.markers = [];
     this.cinematic = null;
     this.time = 0;
+    this.flowerObjs = [];
+    this.hiveAnims = [];
+    this.flowerAnims = [];
+    this.debris = [];
+    this.rings = [];
+    this.arrowSpinUntil = 0;
 
     this.hover = this.makeHover();
     this.scene.add(this.hover);
@@ -137,10 +146,17 @@ export class View {
       new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.18, depthWrite: false }),
     );
     fill.rotation.x = -Math.PI / 2;
-    g.add(ring, fill);
+    const arrow = new THREE.Mesh(
+      arrowGeometry(),
+      new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    arrow.position.y = 0.06;
+    arrow.scale.setScalar(1.1);
+    arrow.visible = false;
+    g.add(ring, fill, arrow);
     g.position.y = 0.012;
     g.visible = false;
-    g.userData = { ring, fill };
+    g.userData = { ring, fill, arrow };
     return g;
   }
 
@@ -167,6 +183,13 @@ export class View {
     this.floaters = [];
     this.clearMarkers();
     this.endCinematic();
+    for (const d of this.debris) d.mesh.removeFromParent();
+    this.debris = [];
+    for (const r of this.rings) r.mesh.removeFromParent();
+    this.rings = [];
+    this.hiveAnims = [];
+    this.flowerAnims = [];
+    this.flowerObjs = [];
     const { w, h } = board;
     this.ox = -w / 2;
     this.oz = -h / 2;
@@ -251,7 +274,7 @@ export class View {
         el.style.setProperty('--c', color);
         el.innerHTML = '<span class="n">0</span><span class="bar"><i></i></span>';
         this.overlay.appendChild(el);
-        this.labels.push({ el, owner: hv.owner, pos: new THREE.Vector3(p.x, 1.45, p.z) });
+        this.labels.push({ el, owner: hv.owner, hive: obj, pos: new THREE.Vector3(p.x, 1.45, p.z) });
       }
     }
 
@@ -261,6 +284,7 @@ export class View {
       const p = this.tileToWorld(s.x, s.y);
       f.position.set(p.x, 0, p.z);
       this.levelGroup.add(f);
+      this.flowerObjs.push({ group: f, x: s.x, y: s.y, pivot: f.userData.pivot, pop: 0 });
     });
 
     this.scenery.build(w, h);
@@ -339,18 +363,43 @@ export class View {
     if (this.board) this.fitCamera();
   }
 
+  /**
+   * Frame the board. On portrait screens (phones held upright) the camera
+   * looks at the board from the side, so the long edge runs top to bottom and
+   * the tiles get much bigger.
+   */
   fitCamera() {
     const { w, h } = this.board;
+    const aspect = this.camera.aspect;
+    this.portrait = aspect < 0.82 && w > h;
+    this.camYaw = this.portrait ? Math.PI / 2 : 0;
+    this.camBack.set(-Math.sin(this.camYaw), 0, Math.cos(this.camYaw));
+    const across = this.portrait ? h : w; // board extent left-right on screen
+    const depth = this.portrait ? w : h;  // board extent towards the camera
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
-    const elev = THREE.MathUtils.degToRad(57);
-    const needH = (h + 2.6) / 2 / Math.tan(fov / 2) * Math.sin(elev) * 1.05;
-    const needW = (w + 1.6) / 2 / Math.tan(fov / 2) / this.camera.aspect;
+    const elev = THREE.MathUtils.degToRad(this.portrait ? 62 : 57);
+    const needH = (depth + 2.6) / 2 / Math.tan(fov / 2) * Math.sin(elev) * 1.05;
+    const needW = (across + (this.portrait ? 0.6 : 1.6)) / 2 / Math.tan(fov / 2) / aspect;
     const dist = Math.max(needH, needW);
-    this.camBase.pos.set(0, Math.sin(elev) * dist, Math.cos(elev) * dist + 0.4);
-    this.camBase.look.set(0, 0, 0.55);
+    this.camBase.pos.copy(this.camBack).multiplyScalar(Math.cos(elev) * dist + 0.4);
+    this.camBase.pos.y = Math.sin(elev) * dist;
+    this.camBase.look.copy(this.camBack).multiplyScalar(0.55);
     if (!this.camAnim) {
       this.camera.position.copy(this.camBase.pos);
+      this.currentLook = this.camBase.look.clone();
       this.camera.lookAt(this.camBase.look);
+    }
+  }
+
+  /** Slight push-in while an event pauses the game (and back afterwards). */
+  eventFocus(on) {
+    if (this.cinematic) return;
+    if (on) {
+      const pos = this.camBase.pos.clone().lerp(this.camBase.look, this.portrait ? 0.05 : 0.12);
+      this.tweenCamera(pos, this.camBase.look, 0.6);
+    } else {
+      this.tweenCamera(this.camBase.pos, this.camBase.look, 0.5);
+      this.camAnim.release = true;
     }
   }
 
@@ -377,6 +426,7 @@ export class View {
       this.camera.position.lerpVectors(a.fromPos, a.pos, k);
       this.currentLook = (this.currentLook || new THREE.Vector3()).lerpVectors(a.fromLook, a.look, k);
       this.camera.lookAt(this.currentLook);
+      if (a.t >= 1 && a.release) this.camAnim = null;
     }
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt * 2.5);
@@ -405,8 +455,33 @@ export class View {
     return { x, y };
   }
 
-  setHover(tile, color, ok = true) {
+  /**
+   * Board direction (N/E/S/W) that best matches a screen-space vector at a
+   * tile. Works for any camera angle (also the rotated portrait view).
+   */
+  dirFromScreen(tile, sx, sy) {
+    const p = this.tileToWorld(tile.x, tile.y);
+    const c = this.project(new THREE.Vector3(p.x, 0, p.z));
+    const len = Math.hypot(sx, sy) || 1;
+    let best = 0;
+    let bestDot = -Infinity;
+    for (let d = 0; d < 4; d++) {
+      const q2 = this.project(new THREE.Vector3(p.x + DX[d] * 0.5, 0, p.z + DY[d] * 0.5));
+      const vx = q2.x - c.x, vy = q2.y - c.y;
+      const dot = (vx * sx + vy * sy) / ((Math.hypot(vx, vy) || 1) * len);
+      if (dot > bestDot) { bestDot = dot; best = d; }
+    }
+    return best;
+  }
+
+  setHover(tile, color, ok = true, dir = null) {
     if (!tile) { this.hover.visible = false; return; }
+    const arrow = this.hover.userData.arrow;
+    arrow.visible = dir !== null && ok;
+    if (arrow.visible) {
+      arrow.rotation.y = arrowYaw(dir);
+      arrow.material.color.set(color);
+    }
     const p = this.tileToWorld(tile.x, tile.y);
     this.hover.visible = true;
     this.hover.position.x = p.x;
@@ -449,7 +524,7 @@ export class View {
         o.pop = 1;
       }
       o.dir = a.dir;
-      o.yaw = lerpAngle(o.yaw, arrowYaw(a.dir), Math.min(1, dt * 20));
+      o.yaw = lerpAngle(o.yaw, arrowYaw(a.dir), Math.min(1, dt * (this.time < this.arrowSpinUntil ? 3.5 : 20)));
       o.pop = Math.max(0, o.pop - dt * 5);
       const damaged = a.hp < sim.arrowHp;
       const s = (damaged ? 0.78 : 1) * (1 + o.pop * 0.35);
@@ -656,6 +731,7 @@ export class View {
           this.particles.emit({ x: p.x, y: 0.6, z: p.z }, { count: 40, speed: 2.4, up: 3, color: ['#ffc928', '#2a1a0c', '#ff5a3c'], size: 1.1 });
           this.floatText(ev.lost > 0 ? `−${ev.lost}` : 'Hornisse!', p.x, 1.2, p.z, '#ff3b3b', true);
           this.shake = Math.max(this.shake, 0.6);
+          this.ring(p.x, p.z, '#ff3b3b', 2.6, 0.8);
           break;
         }
         case 'hornetBlocked': {
@@ -697,7 +773,18 @@ export class View {
           break;
         }
         case 'arrowRemoved': {
-          if (ev.reason === 'broken' || ev.reason === 'wind') {
+          const obj = this.arrowObjs.get(ev.cell);
+          if (ev.reason === 'wind' && obj) {
+            // the arrow is blown off the board
+            this.arrowObjs.delete(ev.cell);
+            const a = Math.random() * Math.PI * 2;
+            this.debris.push({
+              mesh: obj.mesh, t: 0,
+              vx: 3.5 + Math.random() * 2, vy: 2.5 + Math.random() * 2, vz: Math.sin(a) * 1.5,
+              spin: (Math.random() - 0.5) * 16,
+            });
+          }
+          if (ev.reason === 'broken' || ev.reason === 'wind' || ev.reason === 'expired') {
             const p = this.tileToWorld(ev.cell % this.board.w, (ev.cell / this.board.w) | 0);
             this.particles.emit({ x: p.x, y: 0.1, z: p.z }, { count: 10, speed: 1.4, up: 1.4, color: this.opts.colors[ev.owner], size: 1 });
           }
@@ -728,6 +815,177 @@ export class View {
         hv.shield.removeFromParent();
         hv.shield = null;
       }
+    }
+  }
+
+  // ------------------------------------------------------- event animations
+
+  /** Expanding ring on the ground (damage / landing effects). */
+  ring(x, z, color, size = 2, dur = 0.7) {
+    const mesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.42, 0.5, 40),
+      new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.05, z);
+    this.scene.add(mesh);
+    this.rings.push({ mesh, t: 0, dur, size });
+  }
+
+  /** Strong feedback when the local player's hive got raided. */
+  hurtHive(owner) {
+    const hv = this.hiveObjs.find((h) => h.owner === owner);
+    this.shake = Math.max(this.shake, 1.3);
+    if (!hv) return;
+    const p = hv.group.position;
+    this.ring(p.x, p.z, '#ff2a2a', 4, 1.1);
+    setTimeout(() => this.ring(p.x, p.z, '#ff7a1c', 3, 0.9), 160);
+    hv.shake = 1.4;
+  }
+
+  /** "Everybody move": hives fly to their new spots. */
+  moveHives(moves, dur = 1.9) {
+    moves.forEach((m, i) => {
+      const obj = this.hiveObjs.find((h) => h.owner === m.owner);
+      if (!obj) return;
+      const from = this.tileToWorld(m.fx, m.fy);
+      const to = this.tileToWorld(m.tx, m.ty);
+      obj.x = m.tx;
+      obj.y = m.ty;
+      this.hiveAnims.push({ obj, from, to, t: -i * 0.12, dur, landed: false, lifted: false });
+    });
+  }
+
+  /** Flowers spin round to their new spawn direction. */
+  turnFlowers(turns, dur = 1.0) {
+    for (const tr of turns) {
+      const fo = this.flowerObjs.find((o) => o.x === tr.x && o.y === tr.y);
+      if (!fo) continue;
+      const from = arrowYaw(tr.from);
+      let to = arrowYaw(tr.to);
+      while (to > from - Math.PI * 2) to -= Math.PI * 2; // always one full extra turn
+      this.flowerAnims.push({ fo, from, to, t: 0, dur });
+      fo.pop = 1;
+      this.particles.emit({ x: fo.group.position.x, y: 0.4, z: fo.group.position.z }, {
+        count: 18, speed: 1.4, up: 1.6, color: ['#ff8fc8', '#ffffff', '#ffe066'], size: 1,
+      });
+    }
+  }
+
+  /** Spin all arrows slowly for a moment (used by "flip"). */
+  spinArrows(sec = 1.2) {
+    this.arrowSpinUntil = this.time + sec;
+  }
+
+  /** Board-wide 3D flourish for an event (on top of the event's own logic). */
+  eventFx(id) {
+    if (!this.board) return;
+    const { w, h } = this.board;
+    const rnd = () => ({ x: this.ox + Math.random() * w, z: this.oz + Math.random() * h });
+    if (id === 'swarm') {
+      for (const fo of this.flowerObjs) {
+        fo.pop = 1;
+        this.particles.emit({ x: fo.group.position.x, y: 0.5, z: fo.group.position.z }, {
+          count: 30, speed: 2, up: 2.5, color: ['#ffd84a', '#fff4b0', '#ffb300'], size: 1,
+        });
+      }
+    } else if (id === 'gold') {
+      for (let i = 0; i < 40; i++) {
+        const p = rnd();
+        this.particles.emit({ x: p.x, y: 2.5 + Math.random() * 2, z: p.z }, {
+          count: 2, speed: 0.3, up: 0, gravity: 2, life: 1.6, color: ['#ffe55c', '#fff4b0', '#ffc400'], size: 1.2,
+        });
+      }
+    } else if (id === 'smoke') {
+      for (let i = 0; i < 24; i++) {
+        const p = rnd();
+        this.particles.emit({ x: p.x, y: 0.3, z: p.z }, {
+          count: 3, speed: 0.6, up: 0.8, gravity: -0.4, life: 1.6, color: ['#d8d8d8', '#bdbdbd', '#f2f2f2'], size: 2.4,
+        });
+      }
+    } else if (id === 'swirl' || id === 'wind') {
+      for (let i = 0; i < 60; i++) {
+        const a = (i / 60) * Math.PI * 2;
+        const r = Math.max(w, h) * 0.45;
+        this.particles.emit({ x: Math.cos(a) * r, y: 0.4 + Math.random(), z: Math.sin(a) * r * 0.75 }, {
+          count: 1, speed: 1.5, up: 0.8, gravity: -0.2, life: 1.2, color: ['#ffffff', '#d6f3ff'], size: 1.3,
+        });
+      }
+    } else if (id === 'hornets') {
+      for (const fo of this.flowerObjs) {
+        this.particles.emit({ x: fo.group.position.x, y: 0.4, z: fo.group.position.z }, {
+          count: 16, speed: 1.6, up: 2, color: ['#ff8a1c', '#1d1208', '#ff3b3b'], size: 1,
+        });
+      }
+    } else if (id === 'arrows') {
+      for (let i = 0; i < 30; i++) {
+        const p = rnd();
+        this.particles.emit({ x: p.x, y: 3 + Math.random() * 2, z: p.z }, {
+          count: 2, speed: 0.2, up: 0, gravity: 3, life: 1.3, color: ['#2f8cff', '#ff4d5e', '#38c95a', '#b25cff'], size: 1.1,
+        });
+      }
+    }
+  }
+
+  updateEventAnims(dt) {
+    for (let i = 0; i < this.hiveAnims.length; i++) {
+      const a = this.hiveAnims[i];
+      a.t += dt;
+      const g = a.obj.group;
+      if (a.t < 0) continue;
+      if (!a.lifted) {
+        a.lifted = true;
+        this.particles.emit({ x: a.from.x, y: 0.1, z: a.from.z }, { count: 16, speed: 1.4, up: 1, color: ['#c9a36b', '#8a6a3a'], size: 1 });
+      }
+      const k = Math.min(1, a.t / a.dur);
+      const e = ease(k);
+      g.position.x = a.from.x + (a.to.x - a.from.x) * e;
+      g.position.z = a.from.z + (a.to.z - a.from.z) * e;
+      g.position.y = Math.sin(k * Math.PI) * 2.4;
+      g.rotation.y = e * Math.PI * 2;
+      if (k >= 1) {
+        g.position.set(a.to.x, 0, a.to.z);
+        g.rotation.y = 0;
+        a.obj.bounce = 1.5;
+        this.ring(a.to.x, a.to.z, this.opts.colors[a.obj.owner] || '#ffd84a', 2.4, 0.6);
+        this.particles.emit({ x: a.to.x, y: 0.1, z: a.to.z }, { count: 22, speed: 1.8, up: 1.2, color: ['#c9a36b', '#8a6a3a', '#ffe066'], size: 1.1 });
+        this.shake = Math.max(this.shake, 0.35);
+        this.hiveAnims.splice(i--, 1);
+      }
+    }
+    for (let i = 0; i < this.flowerAnims.length; i++) {
+      const a = this.flowerAnims[i];
+      a.t += dt;
+      const k = Math.min(1, a.t / a.dur);
+      a.fo.pivot.rotation.y = a.from + (a.to - a.from) * ease(k);
+      if (k >= 1) this.flowerAnims.splice(i--, 1);
+    }
+    for (const fo of this.flowerObjs) {
+      if (fo.pop <= 0) continue;
+      fo.pop = Math.max(0, fo.pop - dt * 2);
+      const sc2 = 1 + Math.sin(fo.pop * Math.PI) * 0.35;
+      fo.group.scale.set(sc2, sc2, sc2);
+    }
+    for (let i = 0; i < this.debris.length; i++) {
+      const d = this.debris[i];
+      d.t += dt;
+      const m = d.mesh;
+      m.position.x += d.vx * dt;
+      m.position.y += d.vy * dt;
+      m.position.z += d.vz * dt;
+      d.vy -= dt * 1.5;
+      m.rotation.x += d.spin * dt;
+      m.rotation.z += d.spin * 0.7 * dt;
+      if (d.t > 1.6) { m.removeFromParent(); this.debris.splice(i--, 1); }
+    }
+    for (let i = 0; i < this.rings.length; i++) {
+      const r = this.rings[i];
+      r.t += dt;
+      const k = r.t / r.dur;
+      if (k >= 1) { r.mesh.removeFromParent(); r.mesh.geometry.dispose(); this.rings.splice(i--, 1); continue; }
+      const sc2 = 0.6 + k * r.size;
+      r.mesh.scale.set(sc2, sc2, sc2);
+      r.mesh.material.opacity = 1 - k;
     }
   }
 
@@ -811,7 +1069,7 @@ export class View {
     cell.scale.setScalar(0.01);
     this.scene.add(cell);
 
-    const camPos = new THREE.Vector3(hp.x, 2.6, hp.z + 5.4);
+    const camPos = new THREE.Vector3(hp.x, 2.6, hp.z).addScaledVector(this.camBack, 5.4);
     const camLook = new THREE.Vector3(hp.x, 1.25, hp.z);
     this.tweenCamera(camPos, camLook, 1.4);
     return new Promise((resolve) => {
@@ -913,12 +1171,15 @@ export class View {
       m.material.opacity = 0.5 + Math.sin(this.time * 8) * 0.4;
     }
     this.updateCinematic(dt);
+    this.updateEventAnims(dt);
     this.scenery.update(dt, this.time);
     this.particles.update(dt);
     this.updateCamera(dt);
 
     // labels & floating texts follow the camera projection
     for (const l of this.labels) {
+      const hp = l.hive.group.position;
+      l.pos.set(hp.x, hp.y + 1.45, hp.z);
       const p = this.project(l.pos);
       l.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
     }

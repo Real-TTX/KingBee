@@ -32,7 +32,10 @@ export function stateHash(battle) {
   };
   mix(sim.tickCount);
   mix(sim.nextId);
+  mix(sim.maxArrows);
   for (const p of sim.players) mix(p.score);
+  for (const h of battle.board.hives) mix(h.owner);
+  for (const s of battle.board.spawners) mix(s.dir);
   for (const e of sim.entities) {
     if (!e.alive) continue;
     mix(e.id); mix(e.x); mix(e.y); mix(e.dir); mix(e.p);

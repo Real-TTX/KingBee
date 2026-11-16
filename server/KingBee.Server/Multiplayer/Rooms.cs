@@ -12,15 +12,16 @@ public static class SeatType
     public const string Closed = "closed"; // nobody joins, wild bees
 }
 
-public sealed record RoomSettings(string Map, string Difficulty, int TimeLimit, int Target)
+public sealed record RoomSettings(string Map, string Difficulty, int TimeLimit, int Target, string? Events = "normal")
 {
-    public static RoomSettings Default { get; } = new("wiese", "normal", 180, 150);
+    public static RoomSettings Default { get; } = new("wiese", "normal", 180, 150, "normal");
 
     public RoomSettings Sanitize() => new(
         string.IsNullOrWhiteSpace(Map) ? "wiese" : Map.Trim()[..Math.Min(Map.Trim().Length, 32)],
         Difficulty is "easy" or "normal" or "hard" ? Difficulty : "normal",
         Math.Clamp(TimeLimit, 60, 600),
-        Math.Clamp(Target, 50, 500));
+        Math.Clamp(Target, 50, 500),
+        Events is "off" or "rare" or "normal" or "often" or "chaos" ? Events : "normal");
 }
 
 public sealed class Seat
