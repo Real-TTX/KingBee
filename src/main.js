@@ -14,6 +14,7 @@ import { drawPreview } from './ui/preview.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import { logoSVG, beeMarkSVG } from './ui/logo.js';
 import { Net, netError } from './net.js';
+import { renderHelpArt } from './ui/helpart.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -884,8 +885,73 @@ for (const b of $$('[data-go]')) {
     if (id === 'puzzles') buildPuzzleGrid();
     if (id === 'battle-setup') refreshSetup();
     show(id);
+    if (id === 'help') requestAnimationFrame(() => renderHelpArt($('#help')));
   });
 }
+
+// ------------------------------------------------------------------ help
+
+const chip = (ic, name, desc) => `<div class="chip"><span class="ci">${icon(ic)}</span><b>${esc(name)}</b><small>${esc(desc)}</small></div>`;
+$('#help-events').innerHTML = Object.values(WAVES).map((w) => chip(w.icon, w.name.replace(/!$/, ''), w.desc)).join('');
+$('#help-bonus').innerHTML = Object.values(BONUSES).map((b) => chip(b.icon, b.name, b.desc)).join('');
+
+// --------------------------------------------------------- about / version
+
+const BUILD = { version: __APP_VERSION__, sha: __BUILD_SHA__, date: new Date(__BUILD_DATE__) };
+$('#menu-ver').textContent = `KING BEE · v${BUILD.version}`;
+$('#about-ver').innerHTML = `<span class="tag">v${BUILD.version}</span> Build <code>${esc(BUILD.sha)}</code><br>Stand ${BUILD.date.toLocaleDateString('de-DE')}`;
+$('#about-year').textContent = BUILD.date.getFullYear();
+$('.about-mark').innerHTML = beeMarkSVG();
+
+function gpuName() {
+  try {
+    const gl = view.renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  } catch {
+    return 'unbekannt';
+  }
+}
+
+async function techInfo() {
+  let server = 'nicht erreichbar';
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store' });
+    if (r.ok) {
+      const h = await r.json();
+      server = `online · ${h.rooms} ${h.rooms === 1 ? 'Raum' : 'Räume'}`;
+    }
+  } catch { /* offline / static hosting */ }
+  return [
+    ['Version', `${BUILD.version} (${BUILD.sha})`],
+    ['Gebaut', BUILD.date.toLocaleString('de-DE')],
+    ['Server', server],
+    ['Multiplayer', net?.connected ? 'verbunden' : 'nicht verbunden'],
+    ['Grafik', gpuName()],
+    ['Bildschirm', `${innerWidth}×${innerHeight} @${devicePixelRatio}x${touchDevice ? ' · Touch' : ''}`],
+    ['Browser', navigator.userAgent],
+  ];
+}
+
+async function openAbout() {
+  audio.ensure();
+  $('#about-modal').classList.remove('hidden');
+  const rows = await techInfo();
+  $('#about-tech').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
+  $('#about-copy').onclick = async () => {
+    const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Technische Infos kopiert.', '#2e7d32', 'check');
+    } catch {
+      toast('Kopieren nicht möglich.', '#c62828', 'x');
+    }
+  };
+}
+const closeAbout = () => $('#about-modal').classList.add('hidden');
+$('#menu-ver').addEventListener('click', openAbout);
+$('#about-close').addEventListener('click', closeAbout);
+$('#about-modal').addEventListener('click', (e) => { if (e.target.id === 'about-modal') closeAbout(); });
 
 function buildPuzzleGrid() {
   const rows = [];
@@ -1281,6 +1347,7 @@ const KEY_DIR = {
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.key === 'Escape' && nameResolve) { closeName(null); return; }
+  if (e.key === 'Escape' && !$('#about-modal').classList.contains('hidden')) { closeAbout(); return; }
   if (e.key === 'm' || e.key === 'M') { updateMute(audio.toggleMute()); return; }
   if (e.key === 'Escape') { togglePause(); return; }
   if (!ctrl || ctrl.demo || paused) return;

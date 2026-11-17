@@ -65,6 +65,34 @@
       </form>
     </div>
 
+    <!-- about / developer info -->
+    <div id="about-modal" class="hidden">
+      <div class="panel narrow about">
+        <button class="round-btn about-x" id="about-close" data-icon="x" title="Schließen"></button>
+        <div class="about-top">
+          <div class="about-mark"></div>
+          <div>
+            <h2>King Bee</h2>
+            <div class="about-ver" id="about-ver"></div>
+          </div>
+        </div>
+        <p class="about-lead">Ein 3D-Bienen-Strategiespiel: Pfeile legen, Schwärme lenken, die Königin schlüpfen lassen.</p>
+        <dl class="about-list">
+          <dt data-icon="bee">Entwickler</dt><dd><a href="https://github.com/Real-TTX" target="_blank" rel="noopener">Real-TTX</a></dd>
+          <dt data-icon="link">Quellcode</dt><dd><a href="https://github.com/Real-TTX/KingBee" target="_blank" rel="noopener">github.com/Real-TTX/KingBee</a></dd>
+          <dt data-icon="alert">Feedback</dt><dd><a href="https://github.com/Real-TTX/KingBee/issues" target="_blank" rel="noopener">Fehler melden &amp; Ideen</a></dd>
+          <dt data-icon="hex">Technik</dt><dd>Three.js &middot; Vite &middot; ASP.NET Core &middot; SignalR</dd>
+          <dt data-icon="book">Schriften</dt><dd>Lilita One, Nunito (SIL OFL)</dd>
+        </dl>
+        <details class="about-dev">
+          <summary data-icon="robot">Technische Infos</summary>
+          <dl class="about-list mono" id="about-tech"></dl>
+          <button class="btn small" id="about-copy" data-icon="copy">Kopieren</button>
+        </details>
+        <p class="about-foot">Mit Liebe zum Summen gebaut &middot; &copy; <span id="about-year"></span></p>
+      </div>
+    </div>
+
     <!-- ========================================================= SCREENS -->
     <div id="screens">
       <!-- main menu -->
@@ -96,7 +124,7 @@
         </nav>
         <div class="menu-foot">
           <button id="menu-mute" class="pill"></button>
-          <span class="ver">KING BEE &middot; v0.4</span>
+          <button class="ver" id="menu-ver" title="Über King Bee"></button>
         </div>
       </section>
 
@@ -185,18 +213,41 @@
 
       <!-- help -->
       <section id="help" class="screen hidden">
-        <div class="panel wide">
+        <div class="panel wide help-panel">
           <header class="panel-head">
             <button class="round-btn" data-go="menu" data-icon="back" title="Zurück"></button>
             <h2>So spielst du</h2>
+            <span class="head-sub">Lotse die meisten Bienen heim &ndash; und lass die Königin schlüpfen.</span>
           </header>
-          <div class="help-grid">
-            <div class="hcard"><span class="hic" data-icon="flower"></span><h3>Blüten</h3><p>Aus den Blüten schwärmen ständig Bienen. Sie fliegen geradeaus und biegen an Wänden zuerst <b>rechts</b> ab, sonst links, sonst zurück.</p></div>
-            <div class="hcard"><span class="hic" data-icon="arrow"></span><h3>Pfeile</h3><p>Maus auf ein Feld und <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> oder Pfeiltasten drücken. Am Handy: über ein Feld in die gewünschte Richtung wischen, Tippen dreht den Pfeil. Du hast <b>3 Pfeile</b>, ein vierter ersetzt den ältesten.</p></div>
-            <div class="hcard"><span class="hic" data-icon="hive"></span><h3>Bienenstock</h3><p>Jede Biene in deinem Stock zählt. Ist er voll, <b>schlüpft die neue Königin</b> und du gewinnst. Sonst gewinnt bei Zeitende der volle Stock.</p></div>
-            <div class="hcard"><span class="hic" data-icon="hornet"></span><h3>Hornissen</h3><p>Hornissen fressen Bienen. Fliegt eine in einen Stock, verliert er <b>ein Drittel</b> seiner Bienen. Sie beschädigen auch Pfeile.</p></div>
-            <div class="hcard"><span class="hic" data-icon="sparkle"></span><h3>Besondere Bienen</h3><p><b>Goldbienen</b> zählen 10. <b>Blütenbienen</b> (rosa) lösen einen Bonus aus: Nektar, Raubzug, Wachsschild oder Duftspur.</p></div>
-            <div class="hcard"><span class="hic" data-icon="swirl"></span><h3>Ereignisse</h3><p>Regelmäßig hält das Spiel kurz an und das Ereignis-Rad dreht sich: Schwarmzeit, Hornissen-Alarm, Rückenwind, Zeitlupe, Goldfieber, Windstoß, Imker-Rauch, Wirbelwind, <b>Alle umziehen</b>, Blütenwechsel, Verkehrte Welt, Pfeilregen. Wie oft, stellst du vor dem Spiel ein.</p></div>
+          <div class="help-cards">
+            <article class="hcard"><div class="hart"><canvas data-art="collect"></canvas><span class="hnum">1</span></div><h3>Bienen sammeln</h3><p>Jede Biene in deinem Stock zählt einen Punkt.</p></article>
+            <article class="hcard"><div class="hart"><canvas data-art="rules"></canvas><span class="hnum">2</span></div><h3>Flugregeln</h3><p>Bienen fliegen geradeaus. An Wänden: <b>rechts</b>, sonst links, sonst zurück.</p></article>
+            <article class="hcard"><div class="hart"><canvas data-art="arrows"></canvas><span class="hnum">3</span></div><h3>Pfeile legen</h3><p>Lenke den Schwarm mit <b>3 Pfeilen</b>. Ein vierter ersetzt den ältesten.</p></article>
+            <article class="hcard"><div class="hart"><canvas data-art="hornet"></canvas><span class="hnum">4</span></div><h3>Hornissen</h3><p>Fressen Bienen. Im Stock kosten sie <b>ein Drittel</b> &ndash; lenk sie zum Gegner!</p></article>
+            <article class="hcard"><div class="hart"><canvas data-art="special"></canvas><span class="hnum">5</span></div><h3>Besondere Bienen</h3><p><b>Gold</b> zählt 10. <b>Rosa</b> Bienen bringen einen Bonus.</p></article>
+            <article class="hcard"><div class="hart"><canvas data-art="queen"></canvas><span class="hnum">6</span></div><h3>Königin schlüpft</h3><p>Voller Stock gewinnt sofort. Sonst zählt der Stand bei Zeitende.</p></article>
+          </div>
+          <div class="help-more">
+            <div class="hbox">
+              <h3 class="sec" data-icon="swirl">Ereignisse</h3>
+              <p class="hsub">Das Spiel hält kurz an und das Rad entscheidet. Wie oft, stellst du vor dem Spiel ein.</p>
+              <div id="help-events" class="chips"></div>
+            </div>
+            <div class="hside">
+              <div class="hbox">
+                <h3 class="sec" data-icon="sparkle">Boni der rosa Bienen</h3>
+                <div id="help-bonus" class="chips one"></div>
+              </div>
+              <div class="hbox">
+                <h3 class="sec" data-icon="arrow">Steuerung</h3>
+                <ul class="keys">
+                  <li><span>Pfeil legen</span><span>Feld anvisieren + <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></li>
+                  <li><span>Am Handy</span><span>über ein Feld <b>wischen</b></span></li>
+                  <li><span>Entfernen</span><span><kbd>Rechtsklick</kbd></span></li>
+                  <li><span>Pause &middot; Ton</span><span><kbd>Esc</kbd><kbd>M</kbd></span></li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       </section>

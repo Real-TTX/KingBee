@@ -6,6 +6,8 @@ FROM --platform=$BUILDPLATFORM node:24-alpine AS web
 WORKDIR /web
 COPY package.json package-lock.json ./
 RUN npm ci
+ARG GIT_SHA=dev
+ENV GIT_SHA=$GIT_SHA
 COPY index.html vite.config.js ./
 COPY src ./src
 RUN npm run build
