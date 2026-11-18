@@ -1,0 +1,44 @@
+@page "/Admin/KingBee"
+@model KingBee.Module.Pages.Admin.KingBee.IndexModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "King Bee · Räume";
+    ViewData["PageSub"] = "Die Online-Räume von King Bee gerade jetzt. Sie leben im Speicher und enden mit ihren Spielern.";
+    ViewData["Crumbs"] = new List<(string, string?)> { ("Administration", "/Admin"), ("King Bee", null) };
+}
+
+<div class="mat-list">
+    @if (Model.Rooms.Count == 0)
+    {
+        <div class="mat-empty">
+            <p class="mat-empty__title">Gerade keine Räume</p>
+            <p class="mat-muted">Sobald jemand online einen Raum erstellt, steht er hier.</p>
+        </div>
+    }
+    else
+    {
+        <md-table caption="Räume">
+            <thead>
+                <tr><th scope="col">Raum</th><th scope="col">Status</th><th scope="col" class="mat-hide-sm">Karte</th><th scope="col">Stöcke</th><th scope="col" class="mat-num">Spieler</th><th scope="col" class="mat-hide-sm">Erstellt</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var r in Model.Rooms)
+                {
+                    <tr>
+                        <td data-label="Raum" class="mat-mono">@r.Code</td>
+                        <td data-label="Status"><span class="mat-pill @(r.Playing ? "mat-pill--success" : "mat-pill--info")">@(r.Playing ? "spielt" : "Lobby")</span></td>
+                        <td data-label="Karte" class="mat-hide-sm">@r.Map</td>
+                        <td data-label="Stöcke">@string.Join(" · ", r.Seats.Select(Model.SeatText))</td>
+                        <td data-label="Spieler" class="mat-num mat-mono">@r.Players</td>
+                        <td data-label="Erstellt" class="mat-mono mat-hide-sm">@Ui.Stamp(r.CreatedUtc)</td>
+                    </tr>
+                }
+            </tbody>
+        </md-table>
+    }
+
+    <div class="mat-actions">
+        <a class="mat-btn mat-btn--primary" href="/kingbee/">@Ui.Icon("play")<span>Zum Spiel</span></a>
+        <a class="mat-btn mat-btn--secondary" href="/Admin/KingBee">@Ui.Icon("refresh")<span>Aktualisieren</span></a>
+    </div>
+</div>

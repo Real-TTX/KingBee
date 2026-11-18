@@ -1,7 +1,8 @@
 using System.Security.Cryptography;
+using MatGame.Sdk;
 using Microsoft.AspNetCore.SignalR;
 
-namespace KingBee.Server.Multiplayer;
+namespace KingBee.Module.Multiplayer;
 
 /// <summary>
 /// Lobby + lockstep relay. The server does not simulate the game: it collects
@@ -10,10 +11,32 @@ namespace KingBee.Server.Multiplayer;
 ///
 /// Server -> client messages: "Room" (RoomView), "GameStart" (GameStart),
 /// "Frame" (frame, inputs), "Desync" (frame), "PlayerLeft" (seat, name).
+/// Online play needs a session of the master (an account or a guest): the hub is mapped with the host's policy, and a seat takes the
+/// account's name unless the player typed another one.
 /// </summary>
 public sealed class GameHub(RoomManager rooms, ILogger<GameHub> log) : Hub
 {
     private string Me => Context.ConnectionId;
+
+    /// <summary>The name of the seat: the one the player chose, else the name of the account.</summary>
+    private string NameOf(string? chosen) => RoomManager.CleanName(string.IsNullOrWhiteSpace(chosen) ? Context.User?.ToAccount()?.Name : chosen);
+
+    public override async Task OnConnectedAsync()
+    {
+        var http = Context.GetHttpContext();
+        var problem = http is null ? null : GameApi.ClientProblem(http.Request, KingBeeModule.Game);
+        if (problem is not null)
+        {
+            throw new HubException(problem);
+        }
+
+        if (Context.User?.ToAccount() is null)
+        {
+            throw new HubException("Bitte zuerst anmelden oder als Gast spielen.");
+        }
+
+        await base.OnConnectedAsync();
+    }
 
     public RoomSummary[] ListRooms() =>
         rooms.Rooms
@@ -33,7 +56,7 @@ public sealed class GameHub(RoomManager rooms, ILogger<GameHub> log) : Hub
             var seat = room.Seats[0];
             seat.Type = SeatType.Human;
             seat.ConnectionId = Me;
-            seat.Name = RoomManager.CleanName(name);
+            seat.Name = NameOf(name);
             room.HostId = Me;
             view = room.ToView();
         }
@@ -57,7 +80,7 @@ public sealed class GameHub(RoomManager rooms, ILogger<GameHub> log) : Hub
                     ?? throw new HubException("Der Raum ist voll.");
                 seat.Type = SeatType.Human;
                 seat.ConnectionId = Me;
-                seat.Name = RoomManager.CleanName(name);
+                seat.Name = NameOf(name);
             }
             view = room.ToView();
         }
@@ -114,7 +137,7 @@ public sealed class GameHub(RoomManager rooms, ILogger<GameHub> log) : Hub
         {
             var seat = room.SeatOf(Me);
             if (seat < 0 || room.Playing) return;
-            room.Seats[seat].Name = RoomManager.CleanName(name);
+            room.Seats[seat].Name = NameOf(name);
             view = room.ToView();
         }
         await Clients.Group(room.GroupName).SendAsync("Room", view);

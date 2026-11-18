@@ -1,0 +1,161 @@
+name: Build
+
+# King Bee is a MatGame plugin: this workflow checks the game (puzzles, maps, lockstep determinism), builds the client and the module next to
+# MatGame (the module references ../MatGame/src/MatGame.Sdk), and then tells MatGame to build its image with the new King Bee.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Tests und Plugin
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: King Bee auschecken
+        uses: actions/checkout@v4
+        with:
+          path: KingBee
+
+      # MatGame of the same branch (dev → dev, else main); falls back to main when the branch does not exist there
+      - name: MatGame-Zweig bestimmen
+        id: branch
+        run: |
+          want="${{ github.base_ref || github.ref_name }}"
+          if [ "$want" != "dev" ]; then want=main; fi
+          if git ls-remote --exit-code --heads https://github.com/Real-TTX/MatGame.git "$want" >/dev/null; then echo "name=$want" >> "$GITHUB_OUTPUT"; else echo "name=main" >> "$GITHUB_OUTPUT"; fi
+
+      - name: MatGame auschecken
+        uses: actions/checkout@v4
+        with:
+          repository: Real-TTX/MatGame
+          ref: ${{ steps.branch.outputs.name }}
+          path: MatGame
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: KingBee/package-lock.json
+
+      - name: Abhängigkeiten
+        working-directory: KingBee
+        run: npm ci
+
+      - name: Puzzles & Karten verifizieren
+        working-directory: KingBee
+        run: npm run verify
+
+      - name: Lockstep-Determinismus
+        working-directory: KingBee
+        run: node tools/test-lockstep.mjs
+
+      - name: Client bauen (nach server/KingBee.Module/wwwroot)
+        working-directory: KingBee
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: npm run build
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Plugin bauen
+        working-directory: KingBee
+        run: dotnet build server/KingBee.Module -c Release -p:Channel=${{ github.ref_name == 'main' && 'release' || 'nightly' }} -p:BuildNumber=${{ github.run_number }}
+
+      - name: MatGame-Image anstoßen
+        if: github.event_name == 'push'
+        env:
+          TOKEN: ${{ secrets.MATGAME_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then echo "MATGAME_DISPATCH_TOKEN fehlt: MatGame baut beim nächsten eigenen Lauf."; exit 0; fi
+          curl -fsS -X POST https://api.github.com/repos/Real-TTX/MatGame/dispatches \
+            -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+            -d "{\"event_type\":\"game-updated\",\"client_payload\":{\"game\":\"kingbee\",\"branch\":\"${{ github.ref_name }}\",\"sha\":\"${{ github.sha }}\"}}"
+
+  # The Windows app (MatGame shell + the built client): one self-installing KingBee.exe and its manifest in the rolling release of the channel
+  # (release-channel from main, nightly-channel from dev); installed apps find it there and update themselves (MatGame.Shell.Updater).
+  windows:
+    name: Windows-App
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: King Bee auschecken
+        uses: actions/checkout@v4
+        with:
+          path: KingBee
+
+      - name: MatGame-Zweig bestimmen
+        id: branch
+        run: |
+          want="${{ github.ref_name }}"
+          if [ "$want" != "dev" ]; then want=main; fi
+          if git ls-remote --exit-code --heads https://github.com/Real-TTX/MatGame.git "$want" >/dev/null; then echo "name=$want" >> "$GITHUB_OUTPUT"; else echo "name=main" >> "$GITHUB_OUTPUT"; fi
+
+      - name: MatGame auschecken
+        uses: actions/checkout@v4
+        with:
+          repository: Real-TTX/MatGame
+          ref: ${{ steps.branch.outputs.name }}
+          path: MatGame
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: KingBee/package-lock.json
+
+      - name: Client bauen
+        working-directory: KingBee
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: npm ci && npm run build
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: App veröffentlichen
+        id: app
+        working-directory: KingBee
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then channel=release; else channel=nightly; fi
+          build=${{ github.run_number }}
+          date=$(date -u +%Y%m%d)
+          dotnet publish app/KingBee.App -c Release -r win-x64 -p:Channel=$channel -p:BuildNumber=$build -p:BuildDate=$date -o out
+          major=$(sed -n 's:.*<KingBeeMajor>\(.*\)</KingBeeMajor>.*:\1:p' Directory.Build.props)
+          minor=$(sed -n 's:.*<KingBeeMinor>\(.*\)</KingBeeMinor>.*:\1:p' Directory.Build.props)
+          if [ "$channel" = "release" ]; then version="$major.$minor.$build-$date"; else version="nightly-$build-$date"; fi
+          sha=$(sha256sum out/KingBee.exe | cut -d' ' -f1)
+          printf '{"version":"%s","channel":"%s","buildNumber":%s,"setup":"KingBee.exe","sha256":"%s"}\n' "$version" "$channel" "$build" "$sha" > out/kingbee-update.json
+          cat out/kingbee-update.json
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: In den Kanal-Release laden
+        working-directory: KingBee
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.app.outputs.channel }}-channel"
+          pre=""; if [ "${{ steps.app.outputs.channel }}" = "nightly" ]; then pre="--prerelease"; fi
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "${{ github.sha }}" $pre --title "King Bee für Windows (${{ steps.app.outputs.channel }})" \
+            --notes "Die Windows-App von King Bee. KingBee.exe herunterladen und starten: sie installiert sich selbst (ohne Administrator) und hält sich aktuell."
+          gh release upload "$tag" out/KingBee.exe out/kingbee-update.json --clobber
+          gh release edit "$tag" --notes "Die Windows-App von King Bee, Version ${{ steps.app.outputs.version }}. KingBee.exe herunterladen und starten: sie installiert sich selbst (ohne Administrator) und hält sich aktuell."

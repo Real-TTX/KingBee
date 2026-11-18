@@ -1,0 +1,45 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <Company>Matthias Schmoldt</Company>
+    <Product>King Bee</Product>
+    <Authors>Matthias Schmoldt</Authors>
+  </PropertyGroup>
+
+  <!-- Versioning (single source of truth: Major/Minor below; keep package.json "version" on the same major.minor). CI overrides Channel / BuildNumber / BuildDate:
+         release : <major>.<minor>.<build>-<date>   e.g. 0.5.42-20261118   (branch main)
+         nightly : nightly-<build>-<date>                                  (branch dev)
+         local   : local-<date>                                            (everything else, the local stack) -->
+  <PropertyGroup>
+    <KingBeeMajor>0</KingBeeMajor>
+    <KingBeeMinor>5</KingBeeMinor>
+
+    <BuildNumber Condition="'$(BuildNumber)' == ''">0</BuildNumber>
+    <Channel Condition="'$(Channel)' == ''">local</Channel>
+    <BuildDate Condition="'$(BuildDate)' == ''">$([System.DateTime]::UtcNow.ToString('yyyyMMdd'))</BuildDate>
+
+    <Version>$(KingBeeMajor).$(KingBeeMinor).$(BuildNumber)</Version>
+    <AssemblyVersion>$(KingBeeMajor).$(KingBeeMinor).0.0</AssemblyVersion>
+    <FileVersion>$(KingBeeMajor).$(KingBeeMinor).0.0</FileVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+    <!-- The master the app shell offers first (MatGame; changeable in the game). -->
+    <MatGameDefaultServer>https://games.matthix.de</MatGameDefaultServer>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Channel)' == 'release'">
+    <InformationalVersion>$(KingBeeMajor).$(KingBeeMinor).$(BuildNumber)-$(BuildDate)</InformationalVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Channel)' == 'nightly'">
+    <InformationalVersion>nightly-$(BuildNumber)-$(BuildDate)</InformationalVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Channel)' == 'local'">
+    <InformationalVersion>local-$(BuildDate)</InformationalVersion>
+  </PropertyGroup>
+
+</Project>

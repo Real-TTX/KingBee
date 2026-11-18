@@ -4,3 +4,7 @@ dist/
 *.log
 **/bin/
 **/obj/
+
+# the Vite build of the client (npm run build) – built by CI and the Docker image of MatGame
+server/KingBee.Module/wwwroot/
+artifacts/

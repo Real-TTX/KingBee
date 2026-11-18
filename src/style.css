@@ -493,7 +493,8 @@ kbd {
 }
 
 /* -------------------------------------------------------------- name modal */
-#name-modal {
+#name-modal,
+#login-modal {
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -504,7 +505,10 @@ kbd {
   backdrop-filter: blur(4px);
   animation: fadein 0.2s ease-out;
 }
-#name-form { display: flex; flex-direction: column; gap: 14px; }
+#name-form, #login-form { display: flex; flex-direction: column; gap: 14px; }
+#login-form .row .btn { flex: 1; min-width: 0; padding-left: 10px; padding-right: 10px; }
+#login-form .sub:empty { display: none; }
+#login-code b { font: 400 28px var(--display); letter-spacing: 3px; }
 #name-input { text-align: center; font-size: 24px; }
 #name-form .row .btn { flex: 1; min-width: 0; padding-left: 10px; padding-right: 10px; }
 #name-form .row .btn.big { flex: 1.3; }
@@ -816,6 +820,25 @@ h3 .ico { color: var(--amber); }
   box-shadow: 0 5px 0 var(--brown);
 }
 .box.rooms { grid-column: span 2; }
+
+/* MatGame: who plays online (account / guest) and, in the app shell, which server */
+.account { display: flex; flex-direction: column; gap: 10px; }
+.account .who { display: flex; align-items: center; gap: 10px; font: 800 18px var(--body); }
+.account .who small { opacity: 0.7; font-weight: 700; }
+.account .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.account .row .btn { flex: 1; min-width: 0; }
+.box.server { margin-bottom: 16px; }
+.box.server .row { display: flex; gap: 10px; }
+.box.server .row .field { flex: 1; min-width: 0; font-size: 17px; }
+.server-list { display: flex; flex-direction: column; gap: 6px; }
+.server-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; border: 3px solid #ead7a6; background: #fffdf4; cursor: pointer; font: 800 15px var(--body); text-align: left; color: var(--ink); }
+.server-item.on { border-color: var(--brown); background: linear-gradient(180deg, #fff1a0, var(--honey)); }
+.server-item small { margin-left: auto; opacity: 0.65; font-weight: 700; }
+.mg-badge { display: inline-flex; align-items: center; gap: 7px; }
+.mg-badge .dot { width: 9px; height: 9px; border-radius: 50%; background: #9e9e9e; }
+.mg-badge[data-state='online'] .dot { background: #38c95a; }
+.mg-badge[data-state='connecting'] .dot { background: #ffb000; }
+.mg-badge[data-state='update'] .dot { background: #c62828; }
 .field {
   font: 800 20px var(--body);
   padding: 10px 14px;

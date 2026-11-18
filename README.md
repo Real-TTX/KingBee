@@ -8,11 +8,11 @@ Ein schnelles 3D-Strategiespiel im Browser: Hunderte Bienen schwirren über das 
 du lenkst sie mit Pfeilen in deinen Bienenstock und schickst die Hornissen zur Konkurrenz.
 Ist dein Stock voll, **schlüpft die neue Königin**.
 
-[![Build & Publish](https://github.com/Real-TTX/KingBee/actions/workflows/docker-image.yml/badge.svg)](https://github.com/Real-TTX/KingBee/actions/workflows/docker-image.yml)
+[![Build](https://github.com/Real-TTX/KingBee/actions/workflows/build.yml/badge.svg)](https://github.com/Real-TTX/KingBee/actions/workflows/build.yml)
 ![Three.js](https://img.shields.io/badge/Three.js-r187-black?logo=threedotjs)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)
 ![SignalR](https://img.shields.io/badge/Multiplayer-SignalR-ffb000)
-![Docker](https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white)
+![MatGame](https://img.shields.io/badge/Plugin-MatGame-6d28d9)
 
 <img src="docs/images/battle.png" alt="Schwarm-Kampf gegen drei KI-Gegner" width="900">
 
@@ -59,7 +59,7 @@ Wer die meisten Bienen in seinen Stock lotst, gewinnt. Wer eine Hornisse in den 
 |---|---|
 | **Schwarm-Kampf** | Du gegen 1–3 KI-Gegner (Leicht / Normal / Schwer) auf 6 Karten. Erster mit vollem Stock gewinnt, sonst der Führende bei Zeitende. |
 | **Solo** | Fülle deinen Stock, bevor die Zeit abläuft. Die anderen Stöcke gehören Wildbienen. |
-| **Online** | Bis zu 4 Spieler, freie Plätze mit KI auffüllen. Beitritt per 4-Buchstaben-Code oder Einladungslink, beim ersten Mal wird nach deinem Namen gefragt. |
+| **Online** | Bis zu 4 Spieler, freie Plätze mit KI auffüllen. Beitritt per 4-Buchstaben-Code oder Einladungslink. Du spielst mit deinem MatGame-Konto oder einfach als Gast. |
 | **Puzzle** | Pfeile legen, Start drücken: Jede Biene muss heim, keine darf gefressen werden. 12 Level mit steigender Schwierigkeit. |
 
 ## Die Regeln in 30 Sekunden
@@ -107,29 +107,34 @@ Fliegt eine Hornisse in deinen Stock, ist das nicht zu übersehen: roter Bildsch
 <br><sub>Auf dem Handy im Hochformat dreht sich das Brett, damit die Felder groß genug zum Wischen sind</sub>
 </div>
 
-## Schnellstart
+## King Bee in MatGame
 
-**Fertiges Image** (wird bei jedem Push auf `main` gebaut, für amd64 und arm64):
+King Bee ist ein **Plugin von [MatGame](https://github.com/Real-TTX/MatGame)**, dem Master der Mat-Spiele. MatGame ist eine Docker-App mit
+Portal, Konten (oder Gast), Verwaltung und allen Spielen. Ein eigenes King-Bee-Image gibt es nicht mehr.
+
+- **Im Browser:** Auf dem Master unter `/kingbee/` spielen, etwa `https://games.matthix.de/kingbee/`. Schwarm-Kampf, Solo und Puzzle laufen
+  komplett im Browser. Für **Online** meldest du dich mit deinem MatGame-Konto an oder spielst als Gast.
+- **In der App** (MatGame-Hülle für Windows, später iOS/Android): Alles außer Online geht ohne Netz. Unter **Online → Server** ist die
+  Standard-Adresse eingetragen; du kannst jede andere MatGame-Instanz eintragen und testen oder **Offline spielen** wählen.
+  Das Abzeichen im Menü zeigt *Online*, *Offline* oder *Update nötig*.
+- **Windows-App herunterladen:** `KingBee.exe` aus dem Release [release-channel](https://github.com/Real-TTX/KingBee/releases/tag/release-channel)
+  (oder [nightly-channel](https://github.com/Real-TTX/KingBee/releases/tag/nightly-channel)) starten. Sie installiert sich selbst, ohne Administrator,
+  ins Startmenü und aktualisiert sich bei neuen Versionen. Entfernen über „Installierte Apps“.
+
+**Lokal ausprobieren** (MatGame liegt als Repository neben KingBee):
 
 ```bash
-docker run -d --name kingbee -p 7461:8080 ghcr.io/real-ttx/kingbee:latest
+./scripts/redeploy.ps1        # baut den lokalen MatGame-Stack mit King Bee neu: http://localhost:2770/kingbee/
 ```
-
-**Selbst bauen** mit Docker Compose:
-
-```bash
-docker compose up -d --build        # http://localhost:7461
-KINGBEE_PORT=7500 docker compose up -d   # anderer Port
-```
-
-Mitspieler im selben Netz öffnen `http://<IP-dieses-Rechners>:7461`, gehen auf **Online** und treten mit dem Raum-Code bei.
 
 **Entwicklung:**
 
 ```bash
 npm install
-npm run dev                                   # Frontend mit Hot Reload (Vite)
-dotnet run --project server/KingBee.Server    # Backend auf :5080, Vite leitet /api und /hubs dorthin
+npm run dev      # Frontend mit Hot Reload (Vite) unter http://localhost:5173/kingbee/,
+                 # Vite leitet /kingbee/hub, /kingbee/api und /api/matgame an den lokalen MatGame-Stack (Port 2770)
+npm run build    # baut den Client nach server/KingBee.Module/wwwroot (das liefert MatGame aus)
+dotnet build KingBee.slnx
 ```
 
 ## Wie der Multiplayer funktioniert
@@ -141,7 +146,7 @@ selbst simulieren: Er ist nur der **Taktgeber**.
 ```mermaid
 sequenceDiagram
     participant A as Spieler A
-    participant S as Server (SignalR)
+    participant S as MatGame (SignalR)
     participant B as Spieler B
     A->>S: Pfeil (x, y, Richtung)
     B->>S: Pfeil (x, y, Richtung)
@@ -167,7 +172,7 @@ node tools/sim-battle.mjs normal        # KI gegen KI auf allen Karten (Balancin
 node tools/gen-puzzle.mjs 12 40 5 2 3   # sucht knifflige Startaufstellungen für ein Puzzle
 ```
 
-Die GitHub Action führt Verifier, Lockstep-Test und beide Builds aus und veröffentlicht danach das Multi-Arch-Image auf `ghcr.io`.
+Die GitHub Action führt Verifier, Lockstep-Test und beide Builds aus (Client und Plugin neben MatGame) und stößt danach den Image-Build von MatGame an.
 
 ## Projektaufbau
 
@@ -176,17 +181,21 @@ src/
   game/       Spiellogik ohne Grafik: Simulation, Kampf + Wellen, KI, Puzzles, Karten, Lockstep
   render/     Three.js: Szene, Modelle, Landschaft, Partikel, Schlüpf-Sequenz
   ui/         SVG-Logo, Icon-Set, Karten-Vorschau
-  main.js     Menüs, Online-Lobby, HUD, Eingabe, Game-Loop
-  net.js      SignalR-Verbindung
-server/KingBee.Server/
+  main.js     Menüs, Online-Lobby (Konto/Gast, Server-Auswahl in der App), HUD, Eingabe, Game-Loop
+  net.js      die Verbindung zum Master über das MatGame-SDK
+  matgame/    Kopie des MatGame-JS-SDK (nie hier ändern: node ../MatGame/tools/sdk-copy.js src/matgame)
+server/KingBee.Module/        das MatGame-Plugin
+  KingBeeModule.cs           Spiel-Info, Routen unter /kingbee: Client, /hub, /api/info
   Multiplayer/GameHub.cs     Räume, Plätze, Start, Eingaben, Prüfsummen
   Multiplayer/FrameLoop.cs   der 50-ms-Takt
-  Program.cs                 liefert das Spiel aus, /api/health, /hubs/game
+  Pages/Admin/KingBee/       Räume in der Verwaltung von MatGame
+  wwwroot/                   der gebaute Client (npm run build, nicht im Repository)
+app/KingBee.App/              die Windows-App (MatGame-Hülle mit dem gebauten Client)
 tools/        Solver, Generator, Tests
 ```
 
 **Technik:** Three.js · Vite · WebAudio (alle Sounds werden live erzeugt, keine Audiodateien) ·
-ASP.NET Core 10 · SignalR · Docker (Multi-Stage, amd64 + arm64)
+ASP.NET Core 10 · SignalR · MatGame-Plugin
 
 <div align="center">
 <br>

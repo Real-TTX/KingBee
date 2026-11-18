@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!--
+    King Bee as a MatGame plugin: the lockstep relay (hub at /kingbee/hub), the web client (wwwroot = the Vite build, served at /kingbee/) and a read-only
+    admin page. The host (../MatGame) references this project; the client is built first (npm run build writes server/KingBee.Module/wwwroot).
+  -->
+  <PropertyGroup>
+    <RootNamespace>KingBee.Module</RootNamespace>
+    <AssemblyName>KingBee.Module</AssemblyName>
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+    <StaticWebAssetBasePath>kingbee</StaticWebAssetBasePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../MatGame/src/MatGame.Sdk/MatGame.Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.AspNetCore.Builder" />
+    <Using Include="Microsoft.AspNetCore.Http" />
+    <Using Include="Microsoft.AspNetCore.Routing" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Hosting" />
+    <Using Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+</Project>

@@ -13,7 +13,8 @@ import {
 import { drawPreview } from './ui/preview.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import { logoSVG, beeMarkSVG } from './ui/logo.js';
-import { Net, netError } from './net.js';
+import { netError, onlineContext, currentContext, createNet } from './net.js';
+import { host, servers, status } from './matgame/index.js';
 import { renderHelpArt } from './ui/helpart.js';
 
 const $ = (s) => document.querySelector(s);
@@ -914,14 +915,18 @@ function gpuName() {
 }
 
 async function techInfo() {
-  let server = 'nicht erreichbar';
+  let server = 'offline';
   try {
-    const r = await fetch('/api/health', { cache: 'no-store' });
-    if (r.ok) {
-      const h = await r.json();
-      server = `online · ${h.rooms} ${h.rooms === 1 ? 'Raum' : 'Räume'}`;
+    const c = currentContext() ?? await onlineContext();
+    if (c?.server && c.entry) {
+      const h = await c.session.fetch(`${c.entry.path}/api/info`);
+      server = `${c.discovery?.name || c.server} · ${h.rooms} ${h.rooms === 1 ? 'Raum' : 'Räume'}`;
+    } else if (c?.problem) {
+      server = `nicht erreichbar (${netError(c.problem)})`;
     }
-  } catch { /* offline / static hosting */ }
+  } catch {
+    server = 'nicht erreichbar';
+  }
   return [
     ['Version', `${BUILD.version} (${BUILD.sha})`],
     ['Gebaut', BUILD.date.toLocaleString('de-DE')],
@@ -1005,14 +1010,18 @@ function updateMute(m) {
 updateMute(audio.muted);
 
 // ================================================================= online
+// Online play goes through a MatGame master (MatGame SDK in src/matgame): in the browser the master that serves the page, in the app shell the
+// server the player chose (or none = offline). The hub needs a session of the master: an account or a guest. Solo, AI and puzzles never need one.
 
 let net = null;
 let room = null;
 let roomListTimer = 0;
+let ctx = null;          // MatGame context: { server, session, discovery, entry, problem }
+let pendingJoin = null;  // an invite code that waits for the sign-in
 
 function getNet() {
   if (!net) {
-    net = new Net();
+    net = createNet(ctx);
     net.on('room', (v) => {
       room = v;
       if (visible('room')) renderRoom();
@@ -1033,19 +1042,55 @@ function getNet() {
   return net;
 }
 
+async function dropNet() {
+  const old = net;
+  net = null;
+  room = null;
+  clearInterval(roomListTimer);
+  if (old) await old.stop().catch(() => {});
+}
+
+const serverName = () => ctx?.discovery?.name || ctx?.session?.serverName || (ctx?.server ? new URL(ctx.server, location.href).host : 'dem Server');
+
 async function openOnline(autoJoin = null) {
   show('online');
-  $('#net-name').value = playerName;
   $('#net-error').textContent = '';
   $('#net-status').textContent = 'Verbinde …';
+  $('#room-list').innerHTML = '';
+  clearInterval(roomListTimer);
+  ctx = await onlineContext({ refresh: true });
+  if (host.isApp) await renderServers();
+  renderAccount();
+  if (!ctx.server) {
+    $('#net-status').textContent = 'Offline';
+    $('#room-list').innerHTML = '<div class="room-empty">Offline: Wähle oben einen Server, um online zu spielen. Schwarm-Kampf und Puzzle gehen immer.</div>';
+    return;
+  }
+  if (ctx.problem) {
+    $('#net-status').textContent = status.label();
+    $('#net-error').textContent = netError(ctx.problem);
+    return;
+  }
+  $('#net-status').textContent = serverName();
+  if (!ctx.session.signedIn) {
+    pendingJoin = autoJoin || pendingJoin;
+    $('#room-list').innerHTML = '<div class="room-empty">Melde dich an oder spiel als Gast, dann siehst du hier die offenen Räume.</div>';
+    return;
+  }
+  await connectHub(autoJoin || pendingJoin);
+}
+
+async function connectHub(autoJoin = null) {
+  pendingJoin = null;
   try {
     await getNet().connect();
-    $('#net-status').textContent = 'Verbunden';
+    $('#net-status').textContent = `Verbunden · ${serverName()}`;
     refreshRooms();
     clearInterval(roomListTimer);
     roomListTimer = setInterval(() => { if (visible('online')) refreshRooms(); }, 3000);
     if (autoJoin) await joinRoom(autoJoin);
   } catch (e) {
+    await dropNet();
     $('#net-status').textContent = 'Offline';
     $('#net-error').textContent = netError(e);
   }
@@ -1067,18 +1112,180 @@ async function refreshRooms() {
   } catch { /* ignore, next refresh retries */ }
 }
 
+// ------------------------------------------------------------ the account
+
+function renderAccount() {
+  const el = $('#net-account');
+  const session = ctx?.session;
+  $('#net-create').disabled = !ctx?.server || !!ctx?.problem;
+  if (!ctx?.server || ctx.problem) {
+    el.innerHTML = `<p class="sub">${ctx?.server ? 'Der Server ist gerade nicht erreichbar.' : 'Offline gespielt wird ohne Konto.'}</p>`;
+    return;
+  }
+  if (session.signedIn) {
+    const a = session.account;
+    el.innerHTML = `<div class="who">${icon('bee')}<span><b>${esc(a.name)}</b>${a.isGuest ? ' <small>(Gast)</small>' : ''}</span></div>
+      <div class="row"><button class="btn small" data-acc="logout" data-icon="leave">Abmelden</button></div>`;
+  } else {
+    el.innerHTML = `<p class="sub">Online spielst du mit deinem Konto auf <b>${esc(serverName())}</b>${session.guests ? ' oder einfach als Gast' : ''}.</p>
+      <div class="row"><button class="btn small" data-acc="login" data-icon="enter">Anmelden</button>${session.guests ? '<button class="btn small primary" data-acc="guest" data-icon="bee">Als Gast spielen</button>' : ''}</div>`;
+  }
+  hydrateIcons(el);
+}
+
+$('#net-account').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-acc]');
+  if (!b) return;
+  $('#net-error').textContent = '';
+  if (b.dataset.acc === 'login') openLogin();
+  if (b.dataset.acc === 'guest') await playAsGuest();
+  if (b.dataset.acc === 'logout') {
+    await dropNet();
+    try { await ctx.session.logout(); } catch (err) { $('#net-error').textContent = netError(err); }
+    openOnline();
+  }
+});
+
+async function playAsGuest({ connect = true } = {}) {
+  const name = await askName({ force: true });
+  if (!name) return false;
+  try {
+    await ctx.session.guest(name);
+  } catch (err) {
+    $('#net-error').textContent = netError(err);
+    return false;
+  }
+  renderAccount();
+  if (connect) await connectHub(pendingJoin);
+  return true;
+}
+
+/** Signed in (or now signed in as a guest); false when the player cancelled or must sign in first. */
+async function ensureSession() {
+  if (!ctx?.server) { $('#net-error').textContent = 'Offline: Wähle zuerst einen Server.'; return false; }
+  if (ctx.session.signedIn) return true;
+  if (ctx.session.guests) return playAsGuest({ connect: false });
+  openLogin();
+  return false;
+}
+
+// sign-in form: inline with the master's host API (cookie in the browser, device token in the app); "Im Browser anmelden" in the app
+let loginAbort = null;
+
+function openLogin() {
+  $('#login-modal').classList.remove('hidden');
+  $('#login-server').textContent = `Konto auf ${serverName()}`;
+  $('#login-error').textContent = '';
+  $('#login-code').textContent = '';
+  $('#login-browser').classList.toggle('hidden', !host.isApp);
+  setTimeout(() => $('#login-name').focus(), 50);
+}
+
+function closeLogin() {
+  loginAbort?.abort();
+  loginAbort = null;
+  $('#login-modal').classList.add('hidden');
+  $('#login-password').value = '';
+}
+
+async function signedIn() {
+  closeLogin();
+  renderAccount();
+  await connectHub(pendingJoin);
+}
+
+$('#login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('#login-name').value.trim();
+  const password = $('#login-password').value;
+  if (!name || !password) { $('#login-error').textContent = 'Bitte Anmeldename und Passwort eingeben.'; return; }
+  $('#login-error').textContent = '';
+  try {
+    await ctx.session.login(name, password);
+    await signedIn();
+  } catch (err) {
+    $('#login-error').textContent = netError(err);
+  }
+});
+$('#login-cancel').addEventListener('click', closeLogin);
+$('#login-register').addEventListener('click', () => {
+  // accounts are made on the master's portal
+  if (host.isApp) host.openBrowser(`${ctx.server}/`);
+  else location.href = `/?returnUrl=${encodeURIComponent(location.pathname + location.search)}`;
+});
+$('#login-browser').addEventListener('click', async () => {
+  loginAbort?.abort();
+  const abort = new AbortController();
+  loginAbort = abort;
+  $('#login-error').textContent = '';
+  try {
+    await ctx.session.deviceLogin({
+      signal: abort.signal,
+      onCode: ({ code }) => { $('#login-code').innerHTML = `Bestätige im Browser den Code <b>${esc(code)}</b>`; },
+    });
+    await signedIn();
+  } catch (err) {
+    if (!abort.signal.aborted) $('#login-error').textContent = netError(err);
+  }
+});
+
+// ------------------------------------------------------------ the server (app shell only)
+
+async function renderServers() {
+  $('#mg-server').classList.remove('hidden');
+  const list = await servers.list();
+  const current = await servers.current();
+  $('#mg-server-list').innerHTML = list.map((s) => `<button class="server-item ${s.url === current ? 'on' : ''}" data-url="${esc(s.url)}">
+      ${icon('online')}<span>${esc(s.name || new URL(s.url).host)}</span><small>${s.builtIn ? 'Standard' : esc(new URL(s.url).host)}</small></button>`).join('')
+    + (current ? '' : '<div class="room-empty">Offline gewählt.</div>');
+  $('#mg-offline').disabled = !current;
+}
+
+$('#mg-server-list').addEventListener('click', async (e) => {
+  const b = e.target.closest('.server-item');
+  if (!b) return;
+  await dropNet();
+  await servers.select(b.dataset.url);
+  openOnline();
+});
+$('#mg-server-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $('#mg-server-url');
+  $('#net-error').textContent = '';
+  try {
+    const doc = await servers.discover(input.value);
+    if (!servers.gameOf(doc, 'kingbee')) throw new Error(`${doc.name || 'Dieser Server'} hat King Bee nicht.`);
+    await dropNet();
+    await servers.select(doc.url);
+    input.value = '';
+    openOnline();
+  } catch (err) {
+    $('#net-error').textContent = netError(err);
+  }
+});
+$('#mg-offline').addEventListener('click', async () => {
+  await dropNet();
+  await servers.select(null);
+  openOnline();
+});
+
+// the badge in the menu (app shell): online / offline / update needed
+if (host.isApp) {
+  const badge = $('#mg-badge');
+  badge.classList.remove('hidden');
+  status.on((value, detail) => {
+    badge.dataset.state = value;
+    badge.querySelector('.txt').textContent = status.label(value);
+    badge.title = detail || 'Verbindung zum MatGame-Server';
+  });
+  onlineContext().then((c) => { ctx = c; }).catch(() => {});
+}
+
+// ------------------------------------------------------------ name (seats, guests)
+
 function saveName(n) {
   playerName = n;
   localStorage.setItem('kingbee.name', n);
-  const field = $('#net-name');
-  if (field) field.value = n;
-}
-
-/** Name from the online screen; empty if the player has not entered one. */
-function rememberName() {
-  const n = $('#net-name').value.trim().slice(0, 16);
-  if (n) saveName(n);
-  return n || playerName;
 }
 
 let nameResolve = null;
@@ -1089,12 +1296,11 @@ let nameResolve = null;
  * is already known.
  */
 function askName({ force = false } = {}) {
-  const known = rememberName();
-  if (known && !force) return Promise.resolve(known);
+  if (playerName && !force) return Promise.resolve(playerName);
   const modal = $('#name-modal');
   modal.classList.remove('hidden');
   const input = $('#name-input');
-  input.value = force ? playerName : '';
+  input.value = force ? (playerName || ctx?.session?.account?.name || '') : '';
   input.classList.remove('shake');
   setTimeout(() => input.focus(), 50);
   return new Promise((resolve) => { nameResolve = resolve; });
@@ -1125,11 +1331,10 @@ $('#name-cancel').addEventListener('click', () => closeName(null));
 
 async function createRoom() {
   $('#net-error').textContent = '';
-  const name = await askName();
-  if (!name) return;
+  if (!await ensureSession()) return;
   try {
     await getNet().connect();
-    room = await net.createRoom(name);
+    room = await net.createRoom(ctx.session.account?.name ?? '');
     openRoom();
   } catch (e) {
     $('#net-error').textContent = netError(e);
@@ -1140,11 +1345,13 @@ async function joinRoom(code) {
   code = String(code || '').trim().toUpperCase();
   if (code.length !== 4) { $('#net-error').textContent = 'Der Raum-Code hat 4 Buchstaben.'; return; }
   $('#net-error').textContent = '';
-  const name = await askName();
-  if (!name) return;
+  if (!await ensureSession()) {
+    if (!ctx?.session?.signedIn) pendingJoin = code;
+    return;
+  }
   try {
     await getNet().connect();
-    room = await net.joinRoom(code, name);
+    room = await net.joinRoom(code, ctx.session.account?.name ?? '');
     openRoom();
   } catch (e) {
     $('#net-error').textContent = netError(e);
@@ -1159,6 +1366,7 @@ $('#room-list').addEventListener('click', (e) => {
   const b = e.target.closest('.room-item');
   if (b) joinRoom(b.dataset.code);
 });
+
 
 const mySeat = () => (room && net ? room.seats.findIndex((s) => s.type === 'human' && s.id === net.id) : -1);
 const amHost = () => !!room && room.seats.some((s) => s.isHost && s.id === net?.id);
@@ -1237,7 +1445,9 @@ $('#room-seats').addEventListener('click', async (e) => {
 $('#room-start').addEventListener('click', () => net.startGame().catch((e) => toast(esc(netError(e)), '#c62828', 'x')));
 $('#room-leave').addEventListener('click', leaveRoomToOnline);
 $('#room-copy').addEventListener('click', async () => {
-  const link = `${location.origin}/?raum=${room.code}`;
+  // the invitation opens the game on the master (in the app shell the page's own address is not reachable for others)
+  const page = host.isApp && ctx?.server ? `${ctx.server}${ctx.entry?.path ?? '/kingbee'}/` : `${location.origin}${location.pathname}`;
+  const link = `${page}?raum=${room.code}`;
   try {
     await navigator.clipboard.writeText(link);
     $('#room-copy').innerHTML = `${icon('check')} Kopiert!`;
@@ -1347,6 +1557,7 @@ const KEY_DIR = {
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.key === 'Escape' && nameResolve) { closeName(null); return; }
+  if (e.key === 'Escape' && !$('#login-modal').classList.contains('hidden')) { closeLogin(); return; }
   if (e.key === 'Escape' && !$('#about-modal').classList.contains('hidden')) { closeAbout(); return; }
   if (e.key === 'm' || e.key === 'M') { updateMute(audio.toggleMute()); return; }
   if (e.key === 'Escape') { togglePause(); return; }

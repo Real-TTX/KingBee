@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 
-namespace KingBee.Server.Multiplayer;
+namespace KingBee.Module.Multiplayer;
 
 /// <summary>
 /// The lockstep clock: every 50 ms each running room gets a "Frame" message

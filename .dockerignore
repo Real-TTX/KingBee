@@ -1,7 +1,10 @@
+# MatGame builds its image with this folder as a build context (additional_contexts: kingbee): keep it small
 node_modules
 dist
 .git
 .vite
 **/bin
 **/obj
+artifacts
 *.log
+server/KingBee.Module/wwwroot

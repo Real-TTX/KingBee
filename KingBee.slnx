@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/server/">
+    <Project Path="server/KingBee.Module/KingBee.Module.csproj" />
+  </Folder>
+  <Folder Name="/app/">
+    <Project Path="app/KingBee.App/KingBee.App.csproj" />
+  </Folder>
+</Solution>

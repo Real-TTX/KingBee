@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#ffc928" />
+    <meta name="matgame-game" content="kingbee" />
+    <meta name="matgame-version" content="%KINGBEE_VERSION%" />
     <title>King Bee</title>
     <link rel="icon" id="favicon" href="data:," />
   </head>
@@ -61,6 +63,26 @@
         <div class="row">
           <button type="button" class="btn" id="name-cancel" data-icon="x">Abbrechen</button>
           <button type="submit" class="btn big primary" id="name-ok" data-icon="check">Weiter</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- sign-in in the app shell (the browser signs in on the master's portal) -->
+    <div id="login-modal" class="hidden">
+      <form class="panel narrow" id="login-form" autocomplete="off">
+        <header class="panel-head center"><h2>Anmelden</h2></header>
+        <p class="sub" id="login-server"></p>
+        <input id="login-name" class="field" maxlength="40" placeholder="Anmeldename" spellcheck="false" autocomplete="username" />
+        <input id="login-password" class="field" type="password" maxlength="200" placeholder="Passwort" autocomplete="current-password" />
+        <p class="sub error" id="login-error"></p>
+        <p class="sub" id="login-code"></p>
+        <div class="row">
+          <button type="button" class="btn" id="login-cancel" data-icon="x">Abbrechen</button>
+          <button type="submit" class="btn big primary" id="login-ok" data-icon="check">Anmelden</button>
+        </div>
+        <div class="row">
+          <button type="button" class="btn small" id="login-browser" data-icon="link">Im Browser anmelden</button>
+          <button type="button" class="btn small" id="login-register" data-icon="plus">Konto erstellen</button>
         </div>
       </form>
     </div>
@@ -124,6 +146,7 @@
         </nav>
         <div class="menu-foot">
           <button id="menu-mute" class="pill"></button>
+          <span id="mg-badge" class="pill mg-badge hidden" title="Verbindung zum MatGame-Server"><span class="dot"></span><span class="txt"></span></span>
           <button class="ver" id="menu-ver" title="Über King Bee"></button>
         </div>
       </section>
@@ -165,10 +188,20 @@
             <h2>Online</h2>
             <span class="head-sub" id="net-status">Verbinde &hellip;</span>
           </header>
+          <!-- the app shell only: which MatGame server (the built-in one, own ones, or none = offline) -->
+          <div id="mg-server" class="box server hidden">
+            <h3 data-icon="online">Server</h3>
+            <div id="mg-server-list" class="server-list"></div>
+            <form id="mg-server-form" class="row" autocomplete="off">
+              <input id="mg-server-url" class="field" placeholder="games.example.com" spellcheck="false" inputmode="url" />
+              <button type="submit" class="btn" data-icon="plus">Testen &amp; wählen</button>
+            </form>
+            <button id="mg-offline" class="btn small" data-icon="x">Offline spielen</button>
+          </div>
           <div class="online-grid">
             <div class="box">
-              <h3 data-icon="bee">Dein Name</h3>
-              <input id="net-name" class="field" maxlength="16" placeholder="Dein Name" autocomplete="off" spellcheck="false" />
+              <h3 data-icon="bee">Du</h3>
+              <div id="net-account" class="account"></div>
               <button id="net-create" class="btn big primary" data-icon="plus">Raum erstellen</button>
             </div>
             <div class="box">

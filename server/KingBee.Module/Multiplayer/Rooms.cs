@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 
-namespace KingBee.Server.Multiplayer;
+namespace KingBee.Module.Multiplayer;
 
 /// <summary>Seat state of one of the four hives in a room.</summary>
 public static class SeatType
